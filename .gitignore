@@ -1,0 +1,17 @@
+# Dependencies (reinstalled via `npm install`, never committed)
+node_modules/
+
+# Generated SQLite database (created automatically on first server run)
+database/*.db
+database/*.sqlite
+
+# Environment / secrets (added in Step 3 when auth introduces a session secret)
+.env
+
+# Electron packaging output (added in Step 10)
+electron/dist/
+electron/out/
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
