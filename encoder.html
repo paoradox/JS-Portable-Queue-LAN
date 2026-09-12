@@ -1,0 +1,459 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Queue Manager | Encoder</title>
+
+    <meta name="portable-queue" content="portable-queue" />
+    <meta name="apple-mobile-web-app-title" content="Queue Manager" />
+    <meta name="theme-color" content="#134087" />
+    <link rel="apple-touch-icon" href="assets/img/ico.png" sizes="180x180" />
+    <link rel="icon" type="image/png" href="assets/img/ico.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="assets/img/ico.png" sizes="16x16" />
+    <link rel="mask-icon" href="assets/img/ico.png" />
+    <link rel="shortcut icon" href="assets/img/ico.png" />
+
+    <link rel="stylesheet" href="assets/css/bootstrap.css" />
+    <link rel="stylesheet" href="assets/css/sidebar.css" />
+    <link rel="stylesheet" href="assets/css/jquery.mCustomScrollbar.min.css" />
+    <script src="assets/js/solid.js"></script>
+    <script src="assets/js/fontawesome.js"></script>
+
+    <style>
+      .auth-gate {
+        position: fixed;
+        inset: 0;
+        background: #fafafa;
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .auth-card {
+        background: #fff;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        max-width: 420px;
+        width: 100%;
+      }
+      .auth-card h3 {
+        margin-bottom: 20px;
+      }
+
+      /* First-run and login card fields: centered text and placeholders */
+      #firstRunForm .form-control {
+        text-align: center;
+      }
+      #firstRunForm .form-control::placeholder {
+        text-align: center;
+      }
+      #loginGateForm .form-control {
+        text-align: center;
+      }
+      #loginGateForm .form-control::placeholder {
+        text-align: center;
+      }
+
+      /* Queue table: two side-by-side "Station | Now serving" tables,
+         same blue/white theme used on index.html, no size changes. */
+      .queue-table {
+        margin-bottom: 0;
+        border: 1px solid #e9ecef;
+      }
+      .queue-table thead th {
+        background: #fff;
+        color: #212529;
+        text-align: center;
+        vertical-align: middle;
+        font-weight: 600;
+        border-bottom: 2px solid #134087;
+      }
+      .queue-table tbody td {
+        background: #134087;
+        color: #fff;
+        text-align: center;
+        vertical-align: middle;
+        border-color: rgba(255, 255, 255, 0.15);
+      }
+
+      .dash-value {
+        font-size: 96px;
+        font-weight: 600;
+        line-height: 1.1;
+        color: #134087;
+        margin: 10px 0;
+      }
+      @media (max-width: 768px) {
+        .dash-value {
+          font-size: 64px;
+        }
+      }
+
+      #dashManualInput {
+        text-align: center;
+      }
+
+      .speak-btn {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+      }
+
+      #counterPickerSelect {
+        text-align: center;
+        text-align-last: center;
+      }
+
+      .picker-card {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e9ecef;
+      }
+      .picker-card .card-title {
+        color: #134087;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <nav id="sidebar">
+        <div class="sidebar-header">
+          <h3>Queue Manager</h3>
+        </div>
+        <ul class="list-unstyled components">
+          <li>
+            <a href="#queue">Queue</a>
+          </li>
+          <li>
+            <a href="#dashboard">Dashboard</a>
+          </li>
+          <li id="adminNavItem" class="d-none">
+            <a href="admin.html">Admin</a>
+          </li>
+        </ul>
+        <ul class="list-unstyled CTAs">
+          <li>
+            <a href="#" id="activeUser">Not logged in</a>
+          </li>
+          <li>
+            <a href="#" id="logoutBtn" class="logout">Logout</a>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Auth gate: covers the whole page until a session exists.
+         Shows "Set up admin" when no accounts exist yet, or
+         "Login" when accounts exist but nobody is signed in. -->
+      <div id="authGate" class="auth-gate d-none">
+        <div id="firstRunForm" class="auth-card d-none">
+          <h3>Set up admin</h3>
+          <p class="text-muted small">
+            No accounts exist yet. Create the first admin account to get
+            started.
+          </p>
+          <div class="mb-3">
+            <label for="firstRunUsername" class="form-label">Username</label>
+            <input
+              type="text"
+              id="firstRunUsername"
+              class="form-control"
+              placeholder="Username"
+              autocomplete="username"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="firstRunPassword" class="form-label">Password</label>
+            <input
+              type="password"
+              id="firstRunPassword"
+              class="form-control"
+              placeholder="Password"
+              autocomplete="new-password"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="firstRunPasswordConfirm" class="form-label"
+              >Confirm password</label
+            >
+            <input
+              type="password"
+              id="firstRunPasswordConfirm"
+              class="form-control"
+              placeholder="Confirm password"
+              autocomplete="new-password"
+            />
+          </div>
+          <div id="firstRunError" class="text-danger small mb-2"></div>
+          <button
+            id="firstRunSubmit"
+            type="button"
+            class="btn btn-primary w-100"
+          >
+            Create admin account
+          </button>
+        </div>
+
+        <div id="loginGateForm" class="auth-card d-none">
+          <h3>Login</h3>
+          <p class="text-muted small">Sign in to continue.</p>
+          <div class="mb-3">
+            <label for="gateUsername" class="form-label">Username</label>
+            <input
+              type="text"
+              id="gateUsername"
+              class="form-control"
+              placeholder="Username"
+              autocomplete="username"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="gatePassword" class="form-label">Password</label>
+            <input
+              type="password"
+              id="gatePassword"
+              class="form-control"
+              placeholder="Password"
+              autocomplete="current-password"
+            />
+          </div>
+          <div id="gateLoginError" class="text-danger small mb-2"></div>
+          <button
+            id="gateLoginSubmit"
+            type="button"
+            class="btn btn-primary w-100"
+          >
+            Login
+          </button>
+        </div>
+      </div>
+
+      <div id="content">
+        <nav class="navbar navbar-expand-lg bg-light">
+          <div class="container-fluid">
+            <button type="button" id="sidebarCollapse" class="btn btn-info">
+              <i class="fas fa-align-left"></i>
+              <span></span>
+            </button>
+            <ul class="nav navbar-nav ms-auto">
+              <li class="nav-item active">
+                <a class="nav-link" href="#"
+                  ><span id="datetime" class="badge rounded-pill text-bg-dark"
+                    >Time Placeholder</span
+                  ></a
+                >
+              </li>
+            </ul>
+          </div>
+        </nav>
+
+        <section id="queue">
+          <div class="container">
+            <div class="row">
+              <div class="col-md-6">
+                <table class="table queue-table">
+                  <thead>
+                    <tr>
+                      <th>Station</th>
+                      <th>Now serving</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>C1</td>
+                      <td>
+                        <span class="badge text-bg-light" data-counter-id="c1"
+                          >—</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>C2</td>
+                      <td>
+                        <span class="badge text-bg-light" data-counter-id="c2"
+                          >—</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>C3</td>
+                      <td>
+                        <span class="badge text-bg-light" data-counter-id="c3"
+                          >—</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>C4</td>
+                      <td>
+                        <span class="badge text-bg-light" data-counter-id="c4"
+                          >—</span
+                        >
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="col-md-6">
+                <table class="table queue-table">
+                  <thead>
+                    <tr>
+                      <th>Station</th>
+                      <th>Now serving</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>C5</td>
+                      <td>
+                        <span class="badge text-bg-light" data-counter-id="c5"
+                          >—</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>C6</td>
+                      <td>
+                        <span class="badge text-bg-light" data-counter-id="c6"
+                          >—</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>PWD</td>
+                      <td>
+                        <span
+                          class="badge text-bg-light"
+                          data-counter-id="pwd"
+                          >—</span
+                        >
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>ESCAL</td>
+                      <td>
+                        <span
+                          class="badge text-bg-light"
+                          data-counter-id="escal"
+                          >—</span
+                        >
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="line"></div>
+
+        <section id="dashboard">
+          <div class="container">
+            <div id="counterPicker" class="row d-none">
+              <div class="col-md-6 mx-auto">
+                <div class="card picker-card">
+                  <div class="card-body text-center py-4">
+                    <h4 class="card-title mb-3">
+                      <i class="fas fa-desktop"></i>
+                      Select your station
+                    </h4>
+                    <select
+                      id="counterPickerSelect"
+                      class="form-select form-select-lg"
+                    >
+                      <option value="">— Choose a station —</option>
+                    </select>
+                    <p class="text-danger small mt-3 mb-0">
+                      This selection is permanent. Contact admin to change your
+                      station later.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="counterDash" class="d-none">
+              <div class="row">
+                <div class="col-md-12 text-center">
+                  <h2 id="dashCounterLabel">—</h2>
+
+                  <div
+                    class="d-flex justify-content-center align-items-center gap-3 flex-wrap"
+                  >
+                    <div id="dashCurrentValue" class="dash-value">—</div>
+                    <button
+                      id="dashSpeakBtn"
+                      type="button"
+                      class="btn btn-outline-primary speak-btn"
+                      title="Speak number"
+                      aria-label="Speak number"
+                    >
+                      <i class="fas fa-volume-up"></i>
+                    </button>
+                  </div>
+
+                  <div class="text-muted small mt-2" id="dashLastUpdated"></div>
+                </div>
+              </div>
+
+              <div class="row mt-4">
+                <div class="col-md-8 mx-auto">
+                  <div
+                    class="input-group input-group-lg mx-auto"
+                    style="max-width: 360px"
+                  >
+                    <span class="input-group-text d-none" id="dashPrefix"
+                      >P</span
+                    >
+                    <input
+                      type="text"
+                      id="dashManualInput"
+                      class="form-control"
+                      placeholder="#"
+                      inputmode="numeric"
+                    />
+                    <button
+                      id="dashSetBtn"
+                      type="button"
+                      class="btn btn-outline-secondary"
+                    >
+                      Set
+                    </button>
+                    <button
+                      id="dashNextBtn"
+                      type="button"
+                      class="btn btn-primary plus"
+                    >
+                      + Issue next
+                    </button>
+                  </div>
+
+                  <div
+                    id="dashError"
+                    class="text-danger small mt-2 text-center"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script type="text/javascript" src="assets/jq/jquery-4.0.0.js"></script>
+    <script type="text/javascript" src="assets/js/bootstrap.js"></script>
+    <script src="assets/jq/jquery.mCustomScrollbar.concat.min.js"></script>
+    <script type="text/javascript" src="assets/js/auth.js"></script>
+    <script type="text/javascript" src="assets/js/queue.js"></script>
+    <script type="text/javascript" src="assets/js/ui.js"></script>
+    <script type="text/javascript" src="assets/js/encoder.js"></script>
+  </body>
+</html>

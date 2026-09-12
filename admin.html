@@ -1,0 +1,674 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Queue Manager | Admin</title>
+    <meta name="portable-queue" content="portable-queue" />
+    <meta name="apple-mobile-web-app-title" content="Queue Manager" />
+    <meta name="theme-color" content="#134087" />
+    <link rel="apple-touch-icon" href="assets/img/ico.png" sizes="180x180" />
+    <link rel="icon" type="image/png" href="assets/img/ico.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="assets/img/ico.png" sizes="16x16" />
+    <link rel="mask-icon" href="assets/img/ico.png" />
+    <link rel="shortcut icon" href="assets/img/ico.png" />
+    <link rel="stylesheet" href="assets/css/bootstrap.css" />
+    <link rel="stylesheet" href="assets/css/sidebar.css" />
+    <link rel="stylesheet" href="assets/css/jquery.mCustomScrollbar.min.css" />
+    <script src="assets/js/solid.js"></script>
+    <script src="assets/js/fontawesome.js"></script>
+    <style>
+      .no-access {
+        position: fixed;
+        inset: 0;
+        background: #fafafa;
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .no-access-card {
+        background: #fff;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        max-width: 420px;
+        width: 100%;
+        text-align: center;
+      }
+      .auth-gate {
+        position: fixed;
+        inset: 0;
+        background: #fafafa;
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .auth-card {
+        background: #fff;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        max-width: 420px;
+        width: 100%;
+      }
+      .auth-card h3 {
+        margin-bottom: 20px;
+      }
+      #firstRunForm .form-control {
+        text-align: center;
+      }
+      #firstRunForm .form-control::placeholder {
+        text-align: center;
+      }
+      #loginGateForm .form-control {
+        text-align: center;
+      }
+      #loginGateForm .form-control::placeholder {
+        text-align: center;
+      }
+      .admin-table {
+        text-align: center;
+      }
+      .admin-table th {
+        white-space: nowrap;
+      }
+      .admin-table td {
+        vertical-align: middle;
+      }
+      .admin-table .btn-sm {
+        padding: 2px 8px;
+        font-size: 0.8rem;
+      }
+      .log-details {
+        font-family: var(--bs-font-monospace);
+        font-size: 0.85em;
+      }
+      .modal-x {
+        background: transparent;
+        border: 0;
+        font-size: 1.75rem;
+        line-height: 1;
+        color: #000;
+        opacity: 0.5;
+        padding: 0 0.25rem;
+        cursor: pointer;
+        margin-left: auto;
+      }
+      .modal-x:hover {
+        opacity: 0.75;
+      }
+      #editUserModal #editUserUsername {
+        text-align: center;
+      }
+      #editUserModal #editUserUsername::placeholder {
+        text-align: center;
+      }
+      #createUserModal #newUserUsername,
+      #createUserModal #newUserPassword {
+        text-align: center;
+      }
+      #createUserModal #newUserUsername::placeholder,
+      #createUserModal #newUserPassword::placeholder {
+        text-align: center;
+      }
+      #resetPasswordModal #resetPasswordNew,
+      #resetPasswordModal #resetPasswordConfirm {
+        text-align: center;
+      }
+      #resetPasswordModal #resetPasswordNew::placeholder,
+      #resetPasswordModal #resetPasswordConfirm::placeholder {
+        text-align: center;
+      }
+      #passwordConfirmModal #passwordConfirmInput {
+        text-align: center;
+      }
+      #passwordConfirmModal #passwordConfirmInput::placeholder {
+        text-align: center;
+      }
+      #editUserModal #editUserCounter,
+      #createUserModal #newUserCounter {
+        text-align: center;
+        text-align-last: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <nav id="sidebar">
+        <div class="sidebar-header"><h3>Queue Manager</h3></div>
+        <ul class="list-unstyled components">
+          <li><a href="encoder.html">Back to Encoder</a></li>
+          <li><a href="#users">User Accounts</a></li>
+          <li><a href="#reset">Queue Reset</a></li>
+          <li><a href="#log">Audit Log</a></li>
+        </ul>
+        <ul class="list-unstyled CTAs">
+          <li><a href="#" id="activeUser">Not logged in</a></li>
+          <li><a href="#" id="logoutBtn" class="logout">Logout</a></li>
+        </ul>
+      </nav>
+
+      <!-- Auth gate: covers the whole page until a session exists.
+     Shows "Set up admin" when no accounts exist yet, or
+     "Login" when accounts exist but nobody is signed in. -->
+      <div id="authGate" class="auth-gate d-none">
+        <div id="firstRunForm" class="auth-card d-none">
+          <h3>Set up admin</h3>
+          <p class="text-muted small">
+            No accounts exist yet. Create the first admin account to get
+            started.
+          </p>
+          <div class="mb-3">
+            <label for="firstRunUsername" class="form-label">Username</label>
+            <input
+              type="text"
+              id="firstRunUsername"
+              class="form-control"
+              placeholder="Username"
+              autocomplete="username"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="firstRunPassword" class="form-label">Password</label>
+            <input
+              type="password"
+              id="firstRunPassword"
+              class="form-control"
+              placeholder="Password"
+              autocomplete="new-password"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="firstRunPasswordConfirm" class="form-label"
+              >Confirm password</label
+            >
+            <input
+              type="password"
+              id="firstRunPasswordConfirm"
+              class="form-control"
+              placeholder="Confirm password"
+              autocomplete="new-password"
+            />
+          </div>
+          <div id="firstRunError" class="text-danger small mb-2"></div>
+          <button
+            id="firstRunSubmit"
+            type="button"
+            class="btn btn-primary w-100"
+          >
+            Create admin account
+          </button>
+        </div>
+
+        <div id="loginGateForm" class="auth-card d-none">
+          <h3>Login</h3>
+          <p class="text-muted small">Sign in to continue.</p>
+          <div class="mb-3">
+            <label for="gateUsername" class="form-label">Username</label>
+            <input
+              type="text"
+              id="gateUsername"
+              class="form-control"
+              placeholder="Username"
+              autocomplete="username"
+            />
+          </div>
+          <div class="mb-3">
+            <label for="gatePassword" class="form-label">Password</label>
+            <input
+              type="password"
+              id="gatePassword"
+              class="form-control"
+              placeholder="Password"
+              autocomplete="current-password"
+            />
+          </div>
+          <div id="gateLoginError" class="text-danger small mb-2"></div>
+          <button
+            id="gateLoginSubmit"
+            type="button"
+            class="btn btn-primary w-100"
+          >
+            Login
+          </button>
+        </div>
+      </div>
+
+      <!-- Create user modal -->
+      <div
+        class="modal fade"
+        id="createUserModal"
+        tabindex="-1"
+        aria-labelledby="createUserModalLabel"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="createUserModalLabel">Create user</h5>
+              <button
+                type="button"
+                class="modal-x"
+                id="createUserX"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label" for="newUserUsername">Username</label>
+                <input
+                  type="text"
+                  id="newUserUsername"
+                  class="form-control"
+                  placeholder="3–20 characters"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="newUserPassword">Password</label>
+                <input
+                  type="password"
+                  id="newUserPassword"
+                  class="form-control"
+                  placeholder="Min 6 characters"
+                  autocomplete="new-password"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="newUserCounter"
+                  >Assigned station</label
+                >
+                <select id="newUserCounter" class="form-select"></select>
+                <div class="form-text">
+                  Choose "Unassigned" to let the user pick on first login.
+                </div>
+              </div>
+              <div class="d-flex justify-content-end">
+                <div class="form-check form-check-reverse">
+                  <input
+                    type="checkbox"
+                    id="newUserIsAdmin"
+                    class="form-check-input"
+                  />
+                  <label class="form-check-label" for="newUserIsAdmin"
+                    >Admin privileges</label
+                  >
+                </div>
+              </div>
+              <div id="createUserError" class="text-danger small mt-2"></div>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-primary w-100"
+                id="createUserSubmit"
+              >
+                Create user
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Edit user modal -->
+      <div
+        class="modal fade"
+        id="editUserModal"
+        tabindex="-1"
+        aria-labelledby="editUserModalLabel"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="editUserModalLabel">Edit user</h5>
+              <button
+                type="button"
+                class="modal-x"
+                id="editUserX"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label" for="editUserUsername"
+                  >Username</label
+                >
+                <input
+                  type="text"
+                  id="editUserUsername"
+                  class="form-control"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="editUserCounter"
+                  >Assigned station</label
+                >
+                <select id="editUserCounter" class="form-select"></select>
+              </div>
+              <div class="d-flex justify-content-end">
+                <div class="form-check form-check-reverse">
+                  <input
+                    type="checkbox"
+                    id="editUserIsAdmin"
+                    class="form-check-input"
+                  />
+                  <label class="form-check-label" for="editUserIsAdmin"
+                    >Admin privileges</label
+                  >
+                </div>
+              </div>
+              <div id="editUserError" class="text-danger small mt-2"></div>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-primary w-100"
+                id="editUserSubmit"
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Reset password modal -->
+      <div
+        class="modal fade"
+        id="resetPasswordModal"
+        tabindex="-1"
+        aria-labelledby="resetPasswordModalLabel"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="resetPasswordModalLabel">
+                Reset password
+              </h5>
+              <button
+                type="button"
+                class="modal-x"
+                id="resetPasswordX"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <div class="modal-body">
+              <p class="text-muted small mb-2 text-center">
+                Setting a new password for
+                <strong id="resetPasswordUsername">—</strong>.
+              </p>
+              <div class="mb-3">
+                <label class="form-label" for="resetPasswordNew"
+                  >New password</label
+                >
+                <input
+                  type="password"
+                  id="resetPasswordNew"
+                  class="form-control"
+                  placeholder="New password"
+                  autocomplete="new-password"
+                />
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="resetPasswordConfirm"
+                  >Confirm new password</label
+                >
+                <input
+                  type="password"
+                  id="resetPasswordConfirm"
+                  class="form-control"
+                  placeholder="Confirm new password"
+                  autocomplete="new-password"
+                />
+              </div>
+              <div id="resetPasswordError" class="text-danger small mt-2"></div>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-primary w-100"
+                id="resetPasswordSubmit"
+              >
+                Reset password
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Password confirmation modal -->
+      <div
+        class="modal fade"
+        id="passwordConfirmModal"
+        tabindex="-1"
+        aria-labelledby="passwordConfirmModalLabel"
+        aria-hidden="true"
+      >
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="passwordConfirmModalLabel">
+                Confirm
+              </h5>
+              <button
+                type="button"
+                class="modal-x"
+                id="passwordConfirmX"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+            <div class="modal-body">
+              <p
+                id="passwordConfirmMessage"
+                class="text-muted small mb-3 text-center"
+              ></p>
+              <div class="mb-3">
+                <label class="form-label" for="passwordConfirmInput"
+                  >Your password</label
+                >
+                <input
+                  type="password"
+                  id="passwordConfirmInput"
+                  class="form-control"
+                  placeholder="Password"
+                  autocomplete="current-password"
+                />
+              </div>
+              <div
+                id="passwordConfirmError"
+                class="text-danger small mt-2"
+              ></div>
+            </div>
+            <div class="modal-footer">
+              <button
+                type="button"
+                class="btn btn-danger w-100"
+                id="passwordConfirmSubmit"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="noAccessGate" class="no-access d-none">
+        <div class="no-access-card">
+          <h4>Admin access required</h4>
+          <p class="text-danger">This account is not an administrator.</p>
+          <a href="encoder.html" class="btn btn-primary">Back to encoder</a>
+        </div>
+      </div>
+      <div id="content">
+        <nav class="navbar navbar-expand-lg bg-light">
+          <div class="container-fluid">
+            <button type="button" id="sidebarCollapse" class="btn btn-info">
+              <i class="fas fa-align-left"></i> <span></span>
+            </button>
+            <ul class="nav navbar-nav ms-auto">
+              <li class="nav-item active">
+                <a class="nav-link p-0" href="#"
+                  ><span id="datetime" class="badge rounded-pill text-bg-dark"
+                    >Time Placeholder</span
+                  ></a
+                >
+              </li>
+            </ul>
+          </div>
+        </nav>
+        <section id="users">
+          <div class="container">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h2 class="mb-0">User accounts</h2>
+              <button type="button" class="btn btn-primary" id="openCreateUser">
+                Create user
+              </button>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-hover admin-table">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Station</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="usersTableBody"></tbody>
+              </table>
+            </div>
+            <div id="usersError" class="text-danger small"></div>
+          </div>
+        </section>
+        <div class="line"></div>
+        <section id="reset">
+          <div class="container">
+            <h2>Queue reset</h2>
+            <p class="text-muted text-center">
+              Reset buttons clear counter values and restart the pool's
+              numbering from 1. The audit log is preserved.
+            </p>
+            <div class="row g-2 justify-content-center">
+              <div class="col-6 col-md-3">
+                <button
+                  type="button"
+                  class="btn btn-outline-danger w-100"
+                  data-reset-pool="c"
+                >
+                  Reset C1–C6 pool
+                </button>
+              </div>
+              <div class="col-6 col-md-3">
+                <button
+                  type="button"
+                  class="btn btn-outline-danger w-100"
+                  data-reset-pool="pwd"
+                >
+                  Reset PWD pool
+                </button>
+              </div>
+              <div class="col-6 col-md-3">
+                <button
+                  type="button"
+                  class="btn btn-outline-danger w-100"
+                  data-reset-pool="escal"
+                >
+                  Reset ESCAL pool
+                </button>
+              </div>
+              <div class="col-6 col-md-3">
+                <button
+                  type="button"
+                  class="btn btn-danger w-100"
+                  id="resetAllBtn"
+                >
+                  Reset all counters
+                </button>
+              </div>
+            </div>
+            <div
+              id="resetError"
+              class="text-danger small mt-2 text-center"
+            ></div>
+          </div>
+        </section>
+        <div class="line"></div>
+        <section id="log">
+          <div class="container">
+            <h2>Audit log</h2>
+            <p class="text-muted text-center">
+              Last 100 actions, newest first. Export buttons download a CSV
+              file. Clearing the log requires your password.
+            </p>
+            <div class="row g-2 justify-content-center mb-3">
+              <div class="col-12 col-md-4">
+                <button
+                  type="button"
+                  class="btn btn-outline-primary w-100"
+                  id="exportLogBtn"
+                >
+                  <i class="fas fa-file-csv"></i> Export full log (CSV)
+                </button>
+              </div>
+              <div class="col-12 col-md-4">
+                <button
+                  type="button"
+                  class="btn btn-outline-primary w-100"
+                  id="exportReportBtn"
+                >
+                  <i class="fas fa-file-csv"></i> Export monthly report (CSV)
+                </button>
+              </div>
+              <div class="col-12 col-md-4">
+                <button
+                  type="button"
+                  class="btn btn-danger w-100"
+                  id="clearLogBtn"
+                >
+                  Clear log
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover admin-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody id="logTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script type="text/javascript" src="assets/jq/jquery-4.0.0.js"></script>
+    <script type="text/javascript" src="assets/js/bootstrap.js"></script>
+    <script src="assets/jq/jquery.mCustomScrollbar.concat.min.js"></script>
+    <script type="text/javascript" src="assets/js/auth.js"></script>
+    <script type="text/javascript" src="assets/js/queue.js"></script>
+    <script type="text/javascript" src="assets/js/ui.js"></script>
+    <script type="text/javascript" src="assets/js/admin.js"></script>
+  </body>
+</html>
