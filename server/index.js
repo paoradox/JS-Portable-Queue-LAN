@@ -9,7 +9,6 @@
  *      steps can push live queue updates to every connected browser tab.
  *
  * What this file does NOT do yet (later steps):
- *   - No SQLite database yet (Step 2).
  *   - No /api/auth/* or /api/queue/* routes yet (Steps 3–4).
  *   - No real queueUpdated events yet (Step 5) — the connection handler
  *     below only logs that someone connected, as a smoke test.
@@ -26,6 +25,11 @@ const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+
+// Requiring ./db runs server/db/index.js immediately, which opens (or
+// creates) database/queue.db and makes sure all tables + the fixed
+// pool/counter rows exist before the server starts accepting requests.
+require('./db');
 
 const PORT = process.env.PORT || 3000;
 
