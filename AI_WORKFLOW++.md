@@ -7,15 +7,15 @@ Single-file AI operating spec combining consistent coding behavior, on-demand RE
 
 | Field | Value |
 |---|---|
-| Project Name | `[JS-Portable-Queue]` |
+| Project Name | `[JS-Portable-Queue-LAN]` |
 | Repository Type | `[Application]` |
 | Language(s) | `[HTML, CSS, JAVASCRIPT]` |
-| Framework(s) | `[BOOTSTRAP 4]` |
-| Database | `[LOCAL STORAGE]` |
-| Package Manager | `[NONE]` |
+| Framework(s) | `[BOOTSTRAP 5, NODEJS, ELECTRON]` |
+| Database | `[LOCAL STORAGE, SQLITE]` |
+| Package Manager | `[npm]` |
 | Testing Framework | `[NONE]` |
 | License | `[NONE]` |
-| Repository URL | `[https://github.com/paoradox/JS-Portable-Queue]` |
+| Repository URL | `[https://github.com/paoradox/JS-Portable-Queue-LAN]` |
 | Documentation URL | `[NONE]` |
 | Demo URL | `[NONE]` |
 | Experience Level | `[Beginner]` |
