@@ -9,10 +9,10 @@
  *            req.session on every request, and mounts the auth/user
  *            REST endpoints under /api/auth and /api/users.
  *   Step 4 — Mounts the queue REST endpoints under /api/queue.
- *
- * What this file does NOT do yet (later steps):
- *   - No real queueUpdated events yet (Step 5) — the connection handler
- *     below only logs that someone connected, as a smoke test.
+ *   Step 5 — Forwards queueService's internal 'queueUpdated' event
+ *            (see server/events.js) to every connected browser over
+ *            Socket.IO, and sends a fresh snapshot to any browser the
+ *            moment it connects.
  *
  * Run it:
  *   npm install
@@ -37,6 +37,8 @@ const session = require('./middleware/session');
 const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
 const queueRoutes = require('./routes/queue');
+const queueService = require('./services/queueService');
+const appEvents = require('./events');
 
 const PORT = process.env.PORT || 3000;
 
@@ -75,10 +77,25 @@ app.use(express.static(FRONTEND_DIR));
 const httpServer = http.createServer(app);
 const io = new Server(httpServer);
 
+// Whenever queueService says something changed (issue, set, reset —
+// anything that calls appendLog internally), broadcast it to every
+// connected browser. This is the whole real-time layer: no polling,
+// no manual "did anything change?" checks anywhere in the frontend.
+appEvents.on('queueUpdated', (payload) => {
+    io.emit('queueUpdated', payload);
+});
+
 io.on('connection', (socket) => {
-    // Step-1 smoke test only. Real events (queueUpdated, etc.) are
-    // added in Step 5 once the queue API exists.
     console.log('Socket.IO: client connected ->', socket.id);
+
+    // Send this one new connection the current state right away, so a
+    // browser that just opened the page doesn't have to wait for the
+    // next mutation to see real data — same as an initial page load
+    // used to read straight out of localStorage.
+    socket.emit('queueUpdated', {
+        state: queueService.getState(),
+        logs: queueService.getLog()
+    });
 
     socket.on('disconnect', () => {
         console.log('Socket.IO: client disconnected ->', socket.id);

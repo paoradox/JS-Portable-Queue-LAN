@@ -21,6 +21,7 @@
 'use strict';
 
 const { db, POOLS, COUNTERS } = require('../db');
+const events = require('../events');
 
 const LOG_MAX = 100;
 
@@ -120,6 +121,12 @@ function getState() {
 // string per row, then flattened back out in getLog() so the frontend
 // sees the exact same flat shape it always has: entry.counterId,
 // entry.pool, entry.value at the top level, not nested.
+//
+// Every mutation in this file (issueNext, setCounterValue, resetPool,
+// resetAll) calls this function exactly once, so it's the one place
+// that needs to say "something changed" — emitting here means every
+// mutation gets real-time sync for free, with nothing to remember to
+// add each time a new mutation is written later.
 function appendLog(action, actor, extra) {
     const ts = new Date().toISOString();
     db.prepare(
@@ -135,6 +142,11 @@ function appendLog(action, actor, extra) {
             '(SELECT id FROM queue_logs ORDER BY id ASC LIMIT ?)'
         ).run(countRow.n - LOG_MAX);
     }
+
+    // Broadcast the fresh snapshot. server/index.js listens for this
+    // and forwards it to every connected browser over Socket.IO — this
+    // module never touches Socket.IO directly (see server/events.js).
+    events.emit('queueUpdated', { state: getState(), logs: getLog() });
 }
 
 function getLog() {
