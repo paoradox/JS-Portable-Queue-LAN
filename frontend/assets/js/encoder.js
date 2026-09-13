@@ -182,16 +182,23 @@
     }
 
     function endSession() {
-        window.JSQ_Auth.logout();
-        unsubscribeQueueChanges();
-        if (stopClock) { stopClock(); stopClock = null; }
-        if (storageReconcileTimer) {
-            window.clearTimeout(storageReconcileTimer);
-            storageReconcileTimer = null;
-        }
-        session = null;
-        activeCounterId = null;
-        window.location.href = 'index.html';
+        // NEW in Step 7: logout used to be an instant localStorage
+        // write; it's a network request now. The .catch() just logs a
+        // failed request — the redirect still happens either way,
+        // since index.html has no login gate to be stuck behind.
+        window.JSQ_Auth.logout().catch(function (err) {
+            console.error('encoder.js: logout request failed', err);
+        }).then(function () {
+            unsubscribeQueueChanges();
+            if (stopClock) { stopClock(); stopClock = null; }
+            if (storageReconcileTimer) {
+                window.clearTimeout(storageReconcileTimer);
+                storageReconcileTimer = null;
+            }
+            session = null;
+            activeCounterId = null;
+            window.location.href = 'index.html';
+        });
     }
 
     function isValidCounterId(id) {
@@ -264,14 +271,19 @@
         if (!isValidCounterId(chosen)) { return; }
         clearError(el.dashError);
 
-        try {
-            window.JSQ_Auth.setUserCounter(session.userId, chosen);
+        // NEW in Step 7: switched from setUserCounter(session.userId, chosen)
+        // to setOwnCounter(chosen) — the server has a separate endpoint for
+        // "the logged-in user picks their own counter" (no admin rights
+        // needed) versus "an admin edits someone else's counter" (admin
+        // rights required). setUserCounter() now always means the latter.
+        // Also now async — was an instant localStorage write before.
+        window.JSQ_Auth.setOwnCounter(chosen).then(function () {
             session = window.JSQ_Auth.getSession();
             activeCounterId = resolveActiveCounter();
             renderCounterOrPicker();
-        } catch (err) {
+        }).catch(function (err) {
             showError(el.dashError, err.message || 'Could not save your station.');
-        }
+        });
     }
 
     function getActor() {
@@ -436,6 +448,9 @@
             this.select();
         });
 
+        // NOTE (Step 7): this listener is now inert — see the matching
+        // note in admin.js's wireEvents(). Left in place; cleanup is
+        // part of Step 9's broader pass.
         window.addEventListener('storage', function (e) {
             if (e.key === 'jsq.users') { scheduleUsersReconcile(); }
         });
@@ -470,10 +485,25 @@
         beginSession();
     }
 
+    // NEW in Step 7: JSQ_Auth.init() does a round trip to the server
+    // (current session + first-run status) before anything above can
+    // be trusted — localStorage never needed this, it was always
+    // synchronously ready. boot() still runs even if init() fails, so
+    // the page doesn't stay blank; its own guards (hasAnyUser/session)
+    // fall back to the safest view (the login gate) in that case.
+    function start() {
+        window.JSQ_Auth.init().then(function () {
+            boot();
+        }).catch(function (err) {
+            console.error('encoder.js: failed to initialize', err);
+            boot();
+        });
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
+        document.addEventListener('DOMContentLoaded', start);
     } else {
-        boot();
+        start();
     }
 
     window.addEventListener('beforeunload', function () {

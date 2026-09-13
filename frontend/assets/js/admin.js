@@ -248,13 +248,21 @@
             return;
         }
 
-        window.JSQ_Auth.logout();
-        if (stopClock) { stopClock(); stopClock = null; }
-        if (sessionReconcileTimer) {
-            window.clearTimeout(sessionReconcileTimer);
-            sessionReconcileTimer = null;
-        }
-        window.location.href = 'index.html';
+        // NEW in Step 7: logout used to be an instant localStorage
+        // write, so the redirect below always happened after it fully
+        // completed. It's a network request now — the .catch() just
+        // logs a failed request; the redirect still happens either
+        // way, since index.html has no login gate to be stuck behind.
+        window.JSQ_Auth.logout().catch(function (err) {
+            console.error('admin.js: logout request failed', err);
+        }).then(function () {
+            if (stopClock) { stopClock(); stopClock = null; }
+            if (sessionReconcileTimer) {
+                window.clearTimeout(sessionReconcileTimer);
+                sessionReconcileTimer = null;
+            }
+            window.location.href = 'index.html';
+        });
     }
 
     // ---------------------------------------------------------------
@@ -482,42 +490,60 @@
         var newCounter  = el.editUserCounter.value || null;
         var newIsAdmin  = el.editUserIsAdmin.checked;
 
-        var errors = [];
+        // NEW in Step 7: renameUser/setUserCounter/setUserIsAdmin used
+        // to be synchronous, so each try/catch below ran instantly and
+        // in order. They're network requests now, so all three (if
+        // needed) fire together and are waited on with
+        // Promise.allSettled — same end result as before: every
+        // requested change is attempted regardless of whether another
+        // one fails, and every failure gets collected and shown
+        // together, not just the first one.
+        var tasks = [];
 
         if (newUsername !== current.username) {
-            try {
-                window.JSQ_Auth.renameUser(userId, newUsername);
-            } catch (e) {
-                errors.push(e.message || 'Could not rename user.');
-            }
+            tasks.push(
+                window.JSQ_Auth.renameUser(userId, newUsername).catch(function (e) {
+                    return Promise.reject(e.message || 'Could not rename user.');
+                })
+            );
         }
 
         if (newCounter !== current.counter) {
-            try {
-                window.JSQ_Auth.setUserCounter(userId, newCounter);
-            } catch (e) {
-                errors.push(e.message || 'Could not set counter.');
-            }
+            tasks.push(
+                window.JSQ_Auth.setUserCounter(userId, newCounter).catch(function (e) {
+                    return Promise.reject(e.message || 'Could not set counter.');
+                })
+            );
         }
 
         if (newIsAdmin !== current.isAdmin) {
-            try {
-                window.JSQ_Auth.setUserIsAdmin(userId, newIsAdmin);
-            } catch (e) {
-                errors.push(e.message || 'Could not change admin flag.');
+            tasks.push(
+                window.JSQ_Auth.setUserIsAdmin(userId, newIsAdmin).catch(function (e) {
+                    return Promise.reject(e.message || 'Could not change admin flag.');
+                })
+            );
+        }
+
+        el.editUserSubmit.disabled = true;
+
+        Promise.allSettled(tasks).then(function (results) {
+            el.editUserSubmit.disabled = false;
+
+            var errors = results
+                .filter(function (r) { return r.status === 'rejected'; })
+                .map(function (r) { return r.reason; });
+
+            renderUsers();
+            session = window.JSQ_Auth.getSession();
+            renderSessionLabels();
+
+            if (errors.length) {
+                el.editUserError.textContent = errors.join(' ');
+                return;
             }
-        }
 
-        renderUsers();
-        session = window.JSQ_Auth.getSession();
-        renderSessionLabels();
-
-        if (errors.length) {
-            el.editUserError.textContent = errors.join(' ');
-            return;
-        }
-
-        closeModal(el.editUserModal);
+            closeModal(el.editUserModal);
+        });
     }
 
     // ---------------------------------------------------------------
@@ -575,12 +601,11 @@
             message: 'Delete "' + user.username + '"? This cannot be undone.',
             confirmLabel: 'Delete user',
             onConfirm: function () {
-                try {
-                    window.JSQ_Auth.deleteUser(userId);
+                window.JSQ_Auth.deleteUser(userId).then(function () {
                     renderUsers();
-                } catch (err) {
+                }).catch(function (err) {
                     el.usersError.textContent = err.message || 'Could not delete user.';
-                }
+                });
             }
         });
     }
@@ -930,6 +955,13 @@
         el.exportLogBtn.addEventListener('click', handleExportLog);
         el.exportReportBtn.addEventListener('click', handleExportReport);
 
+        // NOTE (Step 7): this listener is now inert. It reacted to the
+        // browser's native 'storage' event, which only ever fires for
+        // OTHER TABS on localStorage keys — but user data no longer
+        // lives in localStorage at all (it's server-side now), so
+        // 'jsq.users' will never change there again. Left in place
+        // rather than removed mid-step; cleaning up dead code like
+        // this belongs with Step 9's broader admin.js pass.
         window.addEventListener('storage', function (e) {
             if (e.key === 'jsq.users') { scheduleUsersReconcile(); }
         });
@@ -974,14 +1006,38 @@
         if (stopClock) { stopClock(); }
         stopClock = window.JSQ_UI.startClock(el.datetime);
 
-        renderUsers();
-        renderLog();
+        // NEW in Step 7: the users table used to read straight out of
+        // localStorage (always instantly ready). Now it's a network
+        // fetch, so renderUsers()/renderLog() wait for it to resolve.
+        window.JSQ_Auth.loadUsers().then(function () {
+            renderUsers();
+            renderLog();
+        }).catch(function (err) {
+            console.error('admin.js: failed to load users', err);
+            el.usersError.textContent = 'Could not load users.';
+            renderLog();
+        });
+    }
+
+    // NEW in Step 7: JSQ_Auth.init() does a round trip to the server
+    // (current session + first-run status) before anything above can
+    // be trusted — localStorage never needed this, it was always
+    // synchronously ready. boot() still runs even if init() fails, so
+    // the page doesn't stay blank; its own guards (hasAnyUser/session)
+    // fall back to the safest view (the login gate) in that case.
+    function start() {
+        window.JSQ_Auth.init().then(function () {
+            boot();
+        }).catch(function (err) {
+            console.error('admin.js: failed to initialize', err);
+            boot();
+        });
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
+        document.addEventListener('DOMContentLoaded', start);
     } else {
-        boot();
+        start();
     }
 
     window.addEventListener('beforeunload', function () {

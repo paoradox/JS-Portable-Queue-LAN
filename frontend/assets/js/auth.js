@@ -1,441 +1,165 @@
 /*
- * auth.js — Queue system authentication module
+ * auth.js — Queue system authentication module (Step 7 of the LAN
+ * migration).
  *
- * Public API: window.JSQ_Auth
+ * Public API: window.JSQ_Auth — same function names as before. What
+ * changed is what's INSIDE these functions: they used to read/write
+ * localStorage directly; now they all delegate to JSQ_AuthService
+ * (frontend/assets/js/services/authCache.js), which talks to the
+ * server's SQLite-backed /api/auth/* and /api/users/* endpoints
+ * instead.
+ *
+ * THREE THINGS THIS CHANGE REQUIRES IN admin.js/encoder.js — fixed
+ * together with this same file, in this same step, so the app doesn't
+ * pass through a knowingly-broken state:
+ *
+ * 1. NEW: JSQ_Auth.init() must be awaited once, before anything else
+ *    in this file is trusted. localStorage was always synchronously
+ *    ready; a server-backed cache needs one round trip first. Both
+ *    encoder.js's and admin.js's boot sequences now do this.
+ *
+ * 2. NEW: JSQ_Auth.loadUsers() must be awaited once on admin.html
+ *    before listUsers()/getUserById()/getUserByUsername() return
+ *    anything meaningful (they read a cache that starts empty).
+ *    admin.js's boot() now does this before its first renderUsers().
+ *
+ * 3. Functions that used to be synchronous — renameUser, setUserCounter,
+ *    setUserIsAdmin, deleteUser, logout — are ALL Promises now, since
+ *    they're real network requests. createUser/login/verifyPassword/
+ *    adminResetPassword were ALREADY Promise-based even before this
+ *    migration (the old code hashed passwords with the browser's
+ *    Web Crypto API, which is async even purely locally), so those
+ *    call sites needed no changes at all. The five listed above DID
+ *    need their call sites converted from try/catch to .then()/.catch()
+ *    — done in this step, in admin.js and encoder.js.
+ *
+ * getSession(), isLoggedIn(), isAdmin(), hasAnyUser(), listUsers(),
+ * getUserById(), getUserByUsername() stay synchronous, same as
+ * before — they just read an in-memory cache instead of localStorage,
+ * once it's been filled by init()/loadUsers().
  */
 (function (window) {
     'use strict';
 
-    var USERS_KEY   = 'jsq.users';
-    var SESSION_KEY = 'jsq.session';
-    var ATTEMPTS_KEY = 'jsq.loginAttempts';
-    var COUNTER_KEY_PREFIX = 'jsq.encoder.counter.';
-
-    var MIN_USERNAME_LEN = 3;
-    var MAX_USERNAME_LEN = 20;
-    var MIN_PASSWORD_LEN = 6;
-    var USERNAME_RE = /^[A-Za-z0-9_-]+$/;
-
-    // Login lockout: MAX_LOGIN_ATTEMPTS failures for the same username
-    // within a lockout window trigger a LOCKOUT_MS cooldown before that
-    // username can try again. This is a client-side speed bump only —
-    // anyone with DevTools access can clear jsq.loginAttempts directly.
-    var MAX_LOGIN_ATTEMPTS = 5;
-    var LOCKOUT_MS = 30000; // 30 seconds
-
-    function readUsers() {
-        var raw = window.localStorage.getItem(USERS_KEY);
-        if (!raw) { return []; }
-        try {
-            var parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (e) {
-            console.warn('JSQ_Auth: jsq.users was corrupted, resetting.');
-            window.localStorage.setItem(USERS_KEY, '[]');
-            return [];
-        }
-    }
-
-    function writeUsers(users) {
-        window.localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    }
-
-    function readRawSession() {
-        var raw = window.localStorage.getItem(SESSION_KEY);
-        if (!raw) { return null; }
-        try { return JSON.parse(raw); } catch (e) { return null; }
-    }
-
-    function writeRawSession(record) {
-        window.localStorage.setItem(SESSION_KEY, JSON.stringify(record));
-    }
-
-    function clearRawSession() {
-        window.localStorage.removeItem(SESSION_KEY);
+    var service = window.JSQ_AuthService;
+    if (!service) {
+        throw new Error(
+            'JSQ_Auth: JSQ_AuthService is not defined. Make sure ' +
+            '<script src="assets/js/services/apiClient.js"> and ' +
+            '<script src="assets/js/services/authCache.js"> are both ' +
+            'loaded BEFORE auth.js in this page\'s <script> tags.'
+        );
     }
 
     // ---------------------------------------------------------------
-    // Login attempt tracking (lockout)
+    // Bootstrap (new in Step 7 — see file header, point 1)
     // ---------------------------------------------------------------
 
-    function readAttempts() {
-        var raw = window.localStorage.getItem(ATTEMPTS_KEY);
-        if (!raw) { return {}; }
-        try {
-            var parsed = JSON.parse(raw);
-            return (parsed && typeof parsed === 'object') ? parsed : {};
-        } catch (e) { return {}; }
+    function init() {
+        return service.init();
     }
 
-    function writeAttempts(map) {
-        window.localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(map));
+    // Admin-panel only (see file header, point 2).
+    function loadUsers() {
+        return service.loadUsers();
     }
 
-    function attemptKey(username) {
-        return String(username || '').trim().toLowerCase();
+    // ---------------------------------------------------------------
+    // Reads — synchronous, same contract as before
+    // ---------------------------------------------------------------
+
+    function hasAnyUser() { return service.hasAnyUser(); }
+    function listUsers() { return service.listUsers(); }
+    function getUserById(id) { return service.getUserById(id); }
+    function getUserByUsername(name) { return service.getUserByUsername(name); }
+    function getSession() { return service.getSession(); }
+    function isLoggedIn() { return service.isLoggedIn(); }
+    function isAdmin() { return service.isAdmin(); }
+
+    // ---------------------------------------------------------------
+    // Mutations — same names/parameter order as the old auth.js.
+    // Every one of these now returns a Promise (see file header,
+    // point 3), including several that used to be synchronous.
+    // ---------------------------------------------------------------
+
+    function createUser(opts) { return service.createUser(opts); }
+    function login(username, password) { return service.login(username, password); }
+    function logout() { return service.logout(); }
+
+    // The old signature took a userId, since the CALLER built its own
+    // "current session" object to check against. The server doesn't
+    // work that way — it always verifies the password of whoever's
+    // ACTUALLY logged in (from the session cookie), regardless of what
+    // id is passed here. The parameter is kept only so this function's
+    // signature doesn't change and Step 9 doesn't need to touch its
+    // call sites; passing a different user's id can't check their
+    // password, only the current session's own.
+    function verifyPassword(userId, password) {
+        return service.verifyPassword(password);
     }
 
-    // Returns milliseconds remaining on an active lockout for this
-    // username, or 0 if not locked (including expired lockouts).
-    function getLockoutRemainingMs(username) {
-        var map = readAttempts();
-        var record = map[attemptKey(username)];
-        if (!record || !record.lockedUntil) { return 0; }
-        var remaining = record.lockedUntil - Date.now();
-        return remaining > 0 ? remaining : 0;
+    function changeOwnPassword(userId, oldPassword, newPassword) {
+        return service.changeOwnPassword(oldPassword, newPassword);
     }
 
-    function recordFailedAttempt(username) {
-        var key = attemptKey(username);
-        var map = readAttempts();
-        var record = map[key] || { count: 0, lockedUntil: null };
-
-        // A previous lockout that has already expired starts fresh.
-        if (record.lockedUntil && record.lockedUntil <= Date.now()) {
-            record = { count: 0, lockedUntil: null };
-        }
-
-        record.count += 1;
-        if (record.count >= MAX_LOGIN_ATTEMPTS) {
-            record.lockedUntil = Date.now() + LOCKOUT_MS;
-            record.count = 0;
-        }
-
-        map[key] = record;
-        writeAttempts(map);
-    }
-
-    function clearAttempts(username) {
-        var key = attemptKey(username);
-        var map = readAttempts();
-        if (map[key]) {
-            delete map[key];
-            writeAttempts(map);
-        }
-    }
-
-    function randomSaltHex() {
-        var bytes = new Uint8Array(16);
-        window.crypto.getRandomValues(bytes);
-        var hex = '';
-        for (var i = 0; i < bytes.length; i++) {
-            hex += bytes[i].toString(16).padStart(2, '0');
-        }
-        return hex;
-    }
-
-    async function sha256Hex(input) {
-        if (!window.crypto || !window.crypto.subtle) {
-            throw new Error(
-                'JSQ_Auth: Web Crypto API is unavailable. Serve this app ' +
-                'over http://localhost or https:// — not file://.'
-            );
-        }
-        var buf = new TextEncoder().encode(input);
-        var digest = await window.crypto.subtle.digest('SHA-256', buf);
-        var view = new Uint8Array(digest);
-        var hex = '';
-        for (var i = 0; i < view.length; i++) {
-            hex += view[i].toString(16).padStart(2, '0');
-        }
-        return hex;
-    }
-
-    function hashPassword(password, saltHex) {
-        return sha256Hex(saltHex + ':' + password);
-    }
-
-    function newUserId() {
-        return 'u_' + Date.now().toString(36) + '_' +
-               Math.random().toString(36).slice(2, 10);
-    }
-
-    function validateUsername(name) {
-        if (typeof name !== 'string') { throw new Error('Username is required.'); }
-        name = name.trim();
-        if (name.length < MIN_USERNAME_LEN) {
-            throw new Error('Username must be at least ' + MIN_USERNAME_LEN + ' characters.');
-        }
-        if (name.length > MAX_USERNAME_LEN) {
-            throw new Error('Username must be at most ' + MAX_USERNAME_LEN + ' characters.');
-        }
-        if (!USERNAME_RE.test(name)) {
-            throw new Error('Username may only contain letters, numbers, underscore, and dash.');
-        }
-        return name;
-    }
-
-    function validatePassword(pw) {
-        if (typeof pw !== 'string') { throw new Error('Password is required.'); }
-        if (pw.length < MIN_PASSWORD_LEN) {
-            throw new Error('Password must be at least ' + MIN_PASSWORD_LEN + ' characters.');
-        }
-        return pw;
-    }
-
-    function findUserByName(users, name) {
-        var needle = name.trim().toLowerCase();
-        for (var i = 0; i < users.length; i++) {
-            if (users[i].username.toLowerCase() === needle) { return users[i]; }
-        }
-        return null;
-    }
-
-    function findUserById(users, id) {
-        for (var i = 0; i < users.length; i++) {
-            if (users[i].id === id) { return users[i]; }
-        }
-        return null;
-    }
-
-    // Includes `userId` as an alias of `id` for backward compatibility.
-    // `counterChangedAt` is a timestamp bumped every time the counter
-    // assignment changes — used by encoder.js to detect admin resets.
-    function publicView(user) {
-        return {
-            id: user.id,
-            userId: user.id,
-            username: user.username,
-            isAdmin: user.isAdmin === true,
-            counter: user.counter || null,
-            counterChangedAt: user.counterChangedAt || null,
-            createdAt: user.createdAt
-        };
-    }
-
-    function hasAnyUser() { return readUsers().length > 0; }
-
-    function listUsers() { return readUsers().map(publicView); }
-
-    function getUserById(id) {
-        var user = findUserById(readUsers(), id);
-        return user ? publicView(user) : null;
-    }
-
-    function getUserByUsername(name) {
-        var user = findUserByName(readUsers(), name);
-        return user ? publicView(user) : null;
-    }
-
-    async function createUser(opts) {
-        opts = opts || {};
-        var username = validateUsername(opts.username);
-        var password = validatePassword(opts.password);
-        var isAdmin  = opts.isAdmin === true;
-        var counter  = opts.counter || null;
-
-        var users = readUsers();
-        if (findUserByName(users, username)) {
-            throw new Error('That username is already taken.');
-        }
-
-        var salt = randomSaltHex();
-        var hash = await hashPassword(password, salt);
-
-        var user = {
-            id: newUserId(),
-            username: username,
-            salt: salt,
-            hash: hash,
-            isAdmin: isAdmin,
-            counter: counter,
-            counterChangedAt: counter ? new Date().toISOString() : null,
-            createdAt: new Date().toISOString()
-        };
-        users.push(user);
-        writeUsers(users);
-        return publicView(user);
-    }
-
-    async function login(username, password) {
-        if (typeof username !== 'string' || typeof password !== 'string') {
-            throw new Error('Invalid username or password.');
-        }
-
-        var remainingMs = getLockoutRemainingMs(username);
-        if (remainingMs > 0) {
-            throw new Error(
-                'Too many failed attempts. Try again in ' +
-                Math.ceil(remainingMs / 1000) + 's.'
-            );
-        }
-
-        var users = readUsers();
-        var user = findUserByName(users, username);
-
-        if (!user) {
-            recordFailedAttempt(username);
-            throw new Error('Invalid username or password.');
-        }
-
-        var candidate = await hashPassword(password, user.salt);
-        if (candidate !== user.hash) {
-            recordFailedAttempt(username);
-            throw new Error('Invalid username or password.');
-        }
-
-        clearAttempts(username);
-
-        writeRawSession({
-            userId: user.id,
-            loggedInAt: new Date().toISOString()
-        });
-
-        return publicView(user);
-    }
-
-    function logout() { clearRawSession(); }
-
-    function getSession() {
-        var raw = readRawSession();
-        if (!raw || !raw.userId) { return null; }
-
-        var user = findUserById(readUsers(), raw.userId);
-        if (!user) {
-            clearRawSession();
-            return null;
-        }
-
-        var view = publicView(user);
-        view.loggedInAt = raw.loggedInAt || null;
-        return view;
-    }
-
-    function isLoggedIn() { return getSession() !== null; }
-    function isAdmin() {
-        var s = getSession();
-        return !!(s && s.isAdmin);
-    }
-
-    async function verifyPassword(userId, password) {
-        if (typeof password !== 'string') { return false; }
-        var users = readUsers();
-        var user = findUserById(users, userId);
-        if (!user) { return false; }
-        var candidate = await hashPassword(password, user.salt);
-        return candidate === user.hash;
-    }
-
-    async function changeOwnPassword(userId, oldPassword, newPassword) {
-        validatePassword(newPassword);
-
-        var users = readUsers();
-        var user = findUserById(users, userId);
-        if (!user) { throw new Error('Account not found.'); }
-
-        var candidate = await hashPassword(oldPassword, user.salt);
-        if (candidate !== user.hash) {
-            throw new Error('Current password is incorrect.');
-        }
-
-        var newSalt = randomSaltHex();
-        user.salt = newSalt;
-        user.hash = await hashPassword(newPassword, newSalt);
-        writeUsers(users);
-    }
-
-    async function adminResetPassword(userId, newPassword) {
-        validatePassword(newPassword);
-
-        var users = readUsers();
-        var user = findUserById(users, userId);
-        if (!user) { throw new Error('Account not found.'); }
-
-        var newSalt = randomSaltHex();
-        user.salt = newSalt;
-        user.hash = await hashPassword(newPassword, newSalt);
-        writeUsers(users);
+    function adminResetPassword(userId, newPassword) {
+        return service.adminResetPassword(userId, newPassword);
     }
 
     function renameUser(userId, newUsername) {
-        newUsername = validateUsername(newUsername);
-
-        var users = readUsers();
-        var user = findUserById(users, userId);
-        if (!user) { throw new Error('Account not found.'); }
-
-        var existing = findUserByName(users, newUsername);
-        if (existing && existing.id !== userId) {
-            throw new Error('That username is already taken.');
-        }
-
-        user.username = newUsername;
-        writeUsers(users);
+        return service.renameUser(userId, newUsername);
     }
 
-    // Sets the counter and bumps counterChangedAt. The timestamp lets
-    // the encoder page detect when the assignment was changed by admin,
-    // so it can clear the user's local counter preference.
+    // Admin editing someone ELSE's counter (admin.html's user table).
+    // A user picking their OWN counter (encoder.html) uses
+    // setOwnCounter() below instead — the server itself uses a
+    // different, non-admin endpoint for that case (see
+    // server/routes/auth.js's PATCH /api/auth/counter). encoder.js's
+    // call site was switched to setOwnCounter() in this same step.
     function setUserCounter(userId, counterId) {
-        var users = readUsers();
-        var user = findUserById(users, userId);
-        if (!user) { throw new Error('Account not found.'); }
-
-        user.counter = counterId || null;
-        user.counterChangedAt = new Date().toISOString();
-        writeUsers(users);
-        return publicView(user);
+        return service.setUserCounter(userId, counterId);
     }
 
-    function setUserIsAdmin(userId, isAdmin) {
-        var users = readUsers();
-        var user = findUserById(users, userId);
-        if (!user) { throw new Error('Account not found.'); }
-
-        if (!isAdmin && user.isAdmin) {
-            var adminCount = users.filter(function (u) { return u.isAdmin; }).length;
-            if (adminCount <= 1) {
-                throw new Error('Cannot remove admin from the last admin account.');
-            }
-        }
-
-        user.isAdmin = isAdmin === true;
-        writeUsers(users);
-        return publicView(user);
+    function setUserIsAdmin(userId, isAdminFlag) {
+        return service.setUserIsAdmin(userId, isAdminFlag);
     }
 
     function deleteUser(userId) {
-        var users = readUsers();
-        var user = findUserById(users, userId);
-        if (!user) { throw new Error('Account not found.'); }
+        return service.deleteUser(userId);
+    }
 
-        var session = getSession();
-        if (session && session.id === userId) {
-            throw new Error('You cannot delete the account you are logged in as.');
-        }
+    // ---------------------------------------------------------------
+    // NEW in Step 7 — self-service counter selection. See the
+    // setUserCounter() comment just above for when to use which.
+    // ---------------------------------------------------------------
 
-        if (user.isAdmin) {
-            var adminCount = users.filter(function (u) { return u.isAdmin; }).length;
-            if (adminCount <= 1) {
-                throw new Error('Cannot delete the last admin account.');
-            }
-        }
-
-        users = users.filter(function (u) { return u.id !== userId; });
-        writeUsers(users);
-
-        window.localStorage.removeItem(COUNTER_KEY_PREFIX + userId);
-        window.localStorage.removeItem('jsq.encoder.counterChangedAt.' + userId);
+    function setOwnCounter(counterId) {
+        return service.setOwnCounter(counterId);
     }
 
     window.JSQ_Auth = {
+        init: init,
+        loadUsers: loadUsers,
+
         hasAnyUser: hasAnyUser,
         listUsers: listUsers,
         getUserById: getUserById,
         getUserByUsername: getUserByUsername,
-        createUser: createUser,
-        login: login,
-        logout: logout,
         getSession: getSession,
         isLoggedIn: isLoggedIn,
         isAdmin: isAdmin,
+
+        createUser: createUser,
+        login: login,
+        logout: logout,
         verifyPassword: verifyPassword,
         changeOwnPassword: changeOwnPassword,
         adminResetPassword: adminResetPassword,
         renameUser: renameUser,
         setUserCounter: setUserCounter,
         setUserIsAdmin: setUserIsAdmin,
-        deleteUser: deleteUser
+        deleteUser: deleteUser,
+        setOwnCounter: setOwnCounter
     };
 
 })(window);
