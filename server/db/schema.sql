@@ -8,14 +8,15 @@
 
 -- ---------------------------------------------------------------
 -- users — replaces the jsq.users localStorage key.
--- Same fields auth.js already used per-user (id, username, salt,
--- hash, isAdmin, counter, counterChangedAt, createdAt).
+-- Note: unlike the old SHA-256 approach in auth.js, bcrypt embeds its
+-- own salt inside the generated hash string, so there's no separate
+-- salt column here — just one password_hash column holds everything
+-- bcrypt needs to verify a password later.
 -- ---------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
     id                 TEXT PRIMARY KEY,
     username           TEXT NOT NULL UNIQUE,
-    salt               TEXT NOT NULL,
-    hash               TEXT NOT NULL,
+    password_hash      TEXT NOT NULL,
     is_admin           INTEGER NOT NULL DEFAULT 0,
     counter            TEXT,
     counter_changed_at TEXT,

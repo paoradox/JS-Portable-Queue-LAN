@@ -12,6 +12,8 @@
     "node": ">=22.5.0"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "express": "^4.19.2",
     "socket.io": "^4.7.5"
   },

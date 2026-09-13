@@ -74,6 +74,11 @@ const db = new DatabaseSync(DB_PATH);
 // at once.
 db.exec('PRAGMA journal_mode = WAL');
 
+// SQLite ignores REFERENCES ... ON DELETE CASCADE unless foreign key
+// enforcement is turned on per-connection — it's off by default. This
+// makes deleting a user automatically delete their session rows too.
+db.exec('PRAGMA foreign_keys = ON');
+
 // Run the schema. exec() runs a whole .sql file's worth of statements
 // at once, same as it did with better-sqlite3.
 const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');

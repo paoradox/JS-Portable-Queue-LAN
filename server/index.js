@@ -1,15 +1,16 @@
 /*
  * server/index.js — Application entry point.
  *
- * What this file does right now (Step 1 of the migration — scaffold only):
- *   1. Starts an Express web server.
- *   2. Serves the existing frontend/ folder exactly as-is (same HTML/CSS/JS
- *      that used to be opened through VS Code Live Server).
- *   3. Starts a Socket.IO server attached to that same web server, so later
- *      steps can push live queue updates to every connected browser tab.
+ * What this file does so far:
+ *   Step 1 — Starts an Express web server, serves frontend/ as static
+ *            files, starts a Socket.IO server on the same port.
+ *   Step 2 — Opens/creates database/queue.db on startup (via ./db).
+ *   Step 3 — Parses JSON request bodies and cookies, attaches
+ *            req.session on every request, and mounts the auth/user
+ *            REST endpoints under /api/auth and /api/users.
+ *   Step 4 — Mounts the queue REST endpoints under /api/queue.
  *
  * What this file does NOT do yet (later steps):
- *   - No /api/auth/* or /api/queue/* routes yet (Steps 3–4).
  *   - No real queueUpdated events yet (Step 5) — the connection handler
  *     below only logs that someone connected, as a smoke test.
  *
@@ -23,6 +24,7 @@
 
 const path = require('path');
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const http = require('http');
 const { Server } = require('socket.io');
 
@@ -31,12 +33,38 @@ const { Server } = require('socket.io');
 // pool/counter rows exist before the server starts accepting requests.
 require('./db');
 
+const session = require('./middleware/session');
+const authRoutes = require('./routes/auth');
+const usersRoutes = require('./routes/users');
+const queueRoutes = require('./routes/queue');
+
 const PORT = process.env.PORT || 3000;
 
 // ---------------------------------------------------------------
-// Express app: serves the frontend/ folder as static files.
+// Express app
 // ---------------------------------------------------------------
 const app = express();
+
+// Parses JSON request bodies (req.body) — needed for every POST/PATCH
+// route below that reads e.g. req.body.username.
+app.use(express.json());
+
+// Parses the Cookie header (req.cookies) — needed to read the
+// jsq_session cookie that session.attachSession looks for.
+app.use(cookieParser());
+
+// Figures out who's logged in (or not) for every request, before any
+// route handler runs. Routes that need to *require* a login use
+// session.requireAuth / session.requireAdmin on top of this.
+app.use(session.attachSession);
+
+// REST API routes.
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/queue', queueRoutes);
+
+// Serves the frontend/ folder as static files. Placed after the API
+// routes so /api/* is never accidentally matched as a static file.
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend');
 app.use(express.static(FRONTEND_DIR));
 
