@@ -239,14 +239,14 @@
         <section id="commercial">
           <div class="container">
             <div class="row">
-              <iframe
-                width="800"
-                height="480"
-                src="https://www.youtube.com/embed/mF3n6my4L3w?autoplay=1&loop=1&mute=1"
-                name="youtube embed"
-                allow="autoplay; encrypted-media"
-                allowfullscreen
-              ></iframe>
+              <!-- display.js's initCommercialPlaylist() replaces this
+                   div with a real YouTube iframe once it loads the
+                   video list from videos.txt (falls back to a single
+                   default video if that fails for any reason). -->
+              <div
+                id="commercialFrame"
+                style="width: 800px; max-width: 100%; height: 480px; margin: 0 auto"
+              ></div>
             </div>
           </div>
         </section>

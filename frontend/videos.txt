@@ -1,0 +1,19 @@
+# One YouTube video per line — either the bare video ID or a full URL,
+# either format works. Lines starting with # are ignored (comments).
+#
+# Example with more than one video:
+#   mF3n6my4L3w
+#   https://www.youtube.com/watch?v=dQw4w9WgXcQ
+#
+# The display board cycles through every video listed here, in order,
+# advancing when each one actually finishes, then wraps back to the
+# first one after the last. A single video (like right now) just
+# loops itself — same visual result as the old loop=1 behavior.
+#
+# If this file is ever missing, unreadable, or ends up with nothing
+# usable in it, the display board falls back to this same original
+# video automatically — it never shows a blank or broken player.
+mF3n6my4L3w
+txRdIzCiW_M
+ZvVAPboLLVM
+

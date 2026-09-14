@@ -85,6 +85,41 @@
         padding: 2px 8px;
         font-size: 0.8rem;
       }
+
+      /* Mobile horizontal scroll for the User accounts / Audit log
+         tables. .table-responsive already sets overflow-x: auto (it's
+         a normal Bootstrap class), but on a phone there was nothing
+         guaranteed to actually overflow — table cells could just wrap
+         or squeeze to fit instead, cutting off the Actions column
+         (Edit/Reset pw/Delete) with no scrollable content to reach it.
+         min-width forces real overflow to exist; the rest reinforces
+         touch-scroll behavior explicitly and adds a visible hint,
+         since touch devices often hide scrollbars entirely — making a
+         genuinely scrollable area look identical to a stuck one. */
+      .scroll-hint {
+        display: none;
+      }
+      @media (max-width: 768px) {
+        #content {
+          padding: 20px 12px;
+        }
+        .table-responsive {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-x pan-y;
+        }
+        .admin-table {
+          min-width: 640px;
+        }
+        .scroll-hint {
+          display: block;
+          text-align: center;
+          font-size: 0.75rem;
+          color: #6c757d;
+          margin-bottom: 6px;
+        }
+      }
+
       .log-details {
         font-family: var(--bs-font-monospace);
         font-size: 0.85em;
@@ -135,6 +170,34 @@
       #createUserModal #newUserCounter {
         text-align: center;
         text-align-last: center;
+      }
+
+      /* Time badge on small/phone screens: the full date+time text
+         ("Mon, Sep 14 · 10:09:56 AM") kept its normal desktop size
+         and ran past the edge of narrow viewports instead of shrinking
+         to fit. Smaller font/padding here, plus tighter spacing on the
+         rest of the navbar so the badge has more room to work with. */
+      @media (max-width: 576px) {
+        .navbar .container-fluid {
+          padding-left: 0.5rem;
+          padding-right: 0.5rem;
+          flex-wrap: nowrap;
+        }
+        .navbar .nav-link {
+          padding-left: 0.25rem;
+          padding-right: 0.25rem;
+        }
+        #datetime {
+          font-size: 0.68rem;
+          padding: 0.3em 0.55em;
+          white-space: nowrap;
+        }
+      }
+      @media (max-width: 380px) {
+        #datetime {
+          font-size: 0.6rem;
+          padding: 0.25em 0.45em;
+        }
       }
     </style>
   </head>
@@ -541,6 +604,7 @@
                 Create user
               </button>
             </div>
+            <div class="scroll-hint">&larr; Swipe to see more &rarr;</div>
             <div class="table-responsive">
               <table class="table table-hover admin-table">
                 <thead>
@@ -647,6 +711,7 @@
                 </button>
               </div>
             </div>
+            <div class="scroll-hint">&larr; Swipe to see more &rarr;</div>
             <div class="table-responsive">
               <table class="table table-sm table-hover admin-table">
                 <thead>
