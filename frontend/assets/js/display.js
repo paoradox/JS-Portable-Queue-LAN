@@ -130,10 +130,24 @@
         subscribeBoard();
     }
 
+    // NEW in Step 8: JSQ_Queue.init() does a round trip to the server
+    // (current queue snapshot + log) before anything above can be
+    // trusted — localStorage never needed this, it was always
+    // synchronously ready. This page has no login, so there's no
+    // JSQ_Auth to wait on here — just the queue data.
+    function start() {
+        window.JSQ_Queue.init().then(function () {
+            boot();
+        }).catch(function (err) {
+            console.error('display.js: failed to initialize', err);
+            boot();
+        });
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
+        document.addEventListener('DOMContentLoaded', start);
     } else {
-        boot();
+        start();
     }
 
     window.addEventListener('beforeunload', function () {

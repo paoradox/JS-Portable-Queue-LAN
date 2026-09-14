@@ -161,8 +161,15 @@ function getLog() {
     });
 }
 
+// Unlike every other mutation in this file, clearLog() doesn't call
+// appendLog() (clearing the log shouldn't add a "log cleared" entry
+// to the log itself) — which also means it skips appendLog()'s
+// broadcast. Emitting it explicitly here so connected clients' caches
+// actually reflect the clear, instead of silently going stale until
+// the next unrelated mutation happens to refresh them.
 function clearLog() {
     db.exec('DELETE FROM queue_logs');
+    events.emit('queueUpdated', { state: getState(), logs: getLog() });
 }
 
 // ---------------------------------------------------------------

@@ -283,21 +283,22 @@
         });
     }
 
-    function getActor() {
-        if (!session) { return null; }
-        return { userId: session.userId, username: session.username };
-    }
+    // getActor() was removed here in Step 8 — its only two call sites
+    // (issueNext/setCounterValue below) no longer need it, since the
+    // server determines who performed an action from the session
+    // cookie, not from a client-supplied actor object.
 
     function handleIssueNext() {
         if (!isValidCounterId(activeCounterId)) { return; }
         clearError(el.dashError);
 
-        try {
-            window.JSQ_Queue.issueNext(activeCounterId, getActor());
+        // NEW in Step 8: issueNext used to be an instant localStorage
+        // write; it's a network request now.
+        window.JSQ_Queue.issueNext(activeCounterId).then(function () {
             renderAll();
-        } catch (err) {
+        }).catch(function (err) {
             showError(el.dashError, err.message || 'Could not issue next.');
-        }
+        });
     }
 
     function handleSetValue() {
@@ -305,13 +306,12 @@
         clearError(el.dashError);
 
         var raw = el.dashManualInput.value;
-        try {
-            window.JSQ_Queue.setCounterValue(activeCounterId, raw, getActor());
+        window.JSQ_Queue.setCounterValue(activeCounterId, raw).then(function () {
             el.dashManualInput.value = '';
             renderAll();
-        } catch (err) {
+        }).catch(function (err) {
             showError(el.dashError, err.message || 'Could not set value.');
-        }
+        });
     }
 
     function buildSpeakText(counter) {
@@ -482,14 +482,19 @@
         beginSession();
     }
 
-    // NEW in Step 7: JSQ_Auth.init() does a round trip to the server
-    // (current session + first-run status) before anything above can
-    // be trusted — localStorage never needed this, it was always
-    // synchronously ready. boot() still runs even if init() fails, so
+    // NEW in Step 7/8: JSQ_Auth.init() and JSQ_Queue.init() each do a
+    // round trip to the server (session/first-run status, and the
+    // current queue snapshot + log) before anything above can be
+    // trusted — localStorage never needed this, it was always
+    // synchronously ready. Run together via Promise.all since neither
+    // depends on the other. boot() still runs even if init() fails, so
     // the page doesn't stay blank; its own guards (hasAnyUser/session)
     // fall back to the safest view (the login gate) in that case.
     function start() {
-        window.JSQ_Auth.init().then(function () {
+        Promise.all([
+            window.JSQ_Auth.init(),
+            window.JSQ_Queue.init()
+        ]).then(function () {
             boot();
         }).catch(function (err) {
             console.error('encoder.js: failed to initialize', err);

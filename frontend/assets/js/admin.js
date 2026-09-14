@@ -611,11 +611,10 @@
     // Queue reset
     // ---------------------------------------------------------------
 
-    function currentActor() {
-        var s = window.JSQ_Auth.getSession();
-        if (!s) { return null; }
-        return { userId: s.id, username: s.username };
-    }
+    // currentActor() was removed here in Step 8 — its only two call
+    // sites (resetPool/resetAll above) no longer need it, since the
+    // server determines who performed an action from the session
+    // cookie, not from a client-supplied actor object.
 
     function handleResetPool(poolName, label) {
         el.resetError.textContent = '';
@@ -625,12 +624,16 @@
             confirmLabel: 'Reset',
             danger: true,
             onConfirm: function () {
-                try {
-                    window.JSQ_Queue.resetPool(poolName, currentActor());
+                // NEW in Step 8: resetPool used to be an instant
+                // localStorage write; it's a network request now. The
+                // dropped 2nd argument (actor) is no longer needed —
+                // the server determines who did this from the session
+                // cookie itself, not from whatever the caller claims.
+                window.JSQ_Queue.resetPool(poolName).then(function () {
                     renderLog();
-                } catch (err) {
+                }).catch(function (err) {
                     el.resetError.textContent = err.message || 'Could not reset.';
-                }
+                });
             }
         });
     }
@@ -643,12 +646,11 @@
             confirmLabel: 'Reset all',
             danger: true,
             onConfirm: function () {
-                try {
-                    window.JSQ_Queue.resetAll(currentActor());
+                window.JSQ_Queue.resetAll().then(function () {
                     renderLog();
-                } catch (err) {
+                }).catch(function (err) {
                     el.resetError.textContent = err.message || 'Could not reset.';
-                }
+                });
             }
         });
     }
@@ -708,8 +710,11 @@
             message: 'Clear the entire audit log? This cannot be undone.',
             confirmLabel: 'Clear log',
             onConfirm: function () {
-                window.JSQ_Queue.clearLog();
-                renderLog();
+                window.JSQ_Queue.clearLog().then(function () {
+                    renderLog();
+                }).catch(function (err) {
+                    el.resetError.textContent = err.message || 'Could not clear the log.';
+                });
             }
         });
     }
@@ -1016,14 +1021,21 @@
         });
     }
 
-    // NEW in Step 7: JSQ_Auth.init() does a round trip to the server
-    // (current session + first-run status) before anything above can
-    // be trusted — localStorage never needed this, it was always
-    // synchronously ready. boot() still runs even if init() fails, so
+    // NEW in Step 7/8: JSQ_Auth.init() and JSQ_Queue.init() each do a
+    // round trip to the server (session/first-run status, and the
+    // current queue snapshot + log) before anything above can be
+    // trusted — localStorage never needed this, it was always
+    // synchronously ready. Run together via Promise.all since neither
+    // depends on the other. boot() still runs even if init() fails, so
     // the page doesn't stay blank; its own guards (hasAnyUser/session)
-    // fall back to the safest view (the login gate) in that case.
+    // fall back to the safest view (the login gate) in that case, and
+    // renderLog()'s empty cache just shows "No actions logged yet."
+    // until the next real update arrives over Socket.IO.
     function start() {
-        window.JSQ_Auth.init().then(function () {
+        Promise.all([
+            window.JSQ_Auth.init(),
+            window.JSQ_Queue.init()
+        ]).then(function () {
             boot();
         }).catch(function (err) {
             console.error('admin.js: failed to initialize', err);
