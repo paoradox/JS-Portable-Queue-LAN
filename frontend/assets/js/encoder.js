@@ -109,13 +109,10 @@
 
         el.firstRunSubmit.disabled = true;
 
-        window.JSQ_Auth.createUser({
-            username: username,
-            password: password,
-            isAdmin: true
-        }).then(function () {
-            return window.JSQ_Auth.login(username, password);
-        }).then(function () {
+        // Uses the dedicated first-run endpoint, not createUser()+login() —
+        // there's no admin session yet to authorize a regular createUser()
+        // call with. See the comment on JSQ_Auth.firstRunSetup in auth.js.
+        window.JSQ_Auth.firstRunSetup(username, password).then(function () {
             el.firstRunSubmit.disabled = false;
             hideAuthGate();
             renderAuthButton();

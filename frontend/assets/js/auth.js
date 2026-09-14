@@ -82,6 +82,21 @@
     // point 3), including several that used to be synchronous.
     // ---------------------------------------------------------------
 
+    // IMPORTANT: this is NOT the same as createUser({isAdmin:true})
+    // followed by login(). The server requires an existing ADMIN
+    // session to create any user via createUser() (POST /api/users) —
+    // correct for every case except the very first account, since
+    // there's no admin yet to be logged in as. This hits a dedicated
+    // endpoint (POST /api/auth/first-run-setup) built specifically to
+    // create-and-log-in the first account in one step, with no prior
+    // session required. Use this ONLY for the first-run "Set up admin"
+    // form; every other "create a user" flow (admin.html's "Add user"
+    // button, reached only once an admin is already logged in) still
+    // uses createUser() below, unchanged.
+    function firstRunSetup(username, password) {
+        return service.firstRunSetup(username, password);
+    }
+
     function createUser(opts) { return service.createUser(opts); }
     function login(username, password) { return service.login(username, password); }
     function logout() { return service.logout(); }
@@ -149,6 +164,7 @@
         isLoggedIn: isLoggedIn,
         isAdmin: isAdmin,
 
+        firstRunSetup: firstRunSetup,
         createUser: createUser,
         login: login,
         logout: logout,
