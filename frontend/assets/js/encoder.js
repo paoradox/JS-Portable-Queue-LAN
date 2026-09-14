@@ -6,8 +6,6 @@
 (function (window, document) {
     'use strict';
 
-    var STORAGE_RECONCILE_DEBOUNCE_MS = 75;
-
     var SPEAK_LABELS = {
         c1:    'Station 1',
         c2:    'Station 2',
@@ -22,7 +20,6 @@
     var session = null;
     var activeCounterId = null;
     var unsubscribeQueue = null;
-    var storageReconcileTimer = null;
     var stopClock = null;
     var el = {};
 
@@ -188,10 +185,6 @@
         }).then(function () {
             unsubscribeQueueChanges();
             if (stopClock) { stopClock(); stopClock = null; }
-            if (storageReconcileTimer) {
-                window.clearTimeout(storageReconcileTimer);
-                storageReconcileTimer = null;
-            }
             session = null;
             activeCounterId = null;
             window.location.href = 'index.html';
@@ -358,33 +351,11 @@
         }
     }
 
-    function handleUsersStorageChange() {
-        if (!session) { return; }
-
-        var fresh = window.JSQ_Auth.getSession();
-        if (!fresh) { endSession(); return; }
-
-        if (fresh.username !== session.username) {
-            el.activeUser.textContent = fresh.username;
-        }
-        if (fresh.isAdmin !== session.isAdmin) {
-            updateAdminLink(fresh.isAdmin);
-        }
-
-        session = fresh;
-        activeCounterId = resolveActiveCounter();
-        renderCounterOrPicker();
-    }
-
-    function scheduleUsersReconcile() {
-        if (storageReconcileTimer) {
-            window.clearTimeout(storageReconcileTimer);
-        }
-        storageReconcileTimer = window.setTimeout(function () {
-            storageReconcileTimer = null;
-            handleUsersStorageChange();
-        }, STORAGE_RECONCILE_DEBOUNCE_MS);
-    }
+    // Step 9 cleanup: handleUsersStorageChange/scheduleUsersReconcile
+    // used to live here, reacting to the browser's native 'storage'
+    // event on the 'jsq.users' localStorage key. User data hasn't
+    // lived in localStorage since Step 7, so that event could never
+    // fire again — removed along with the listener below.
 
     // ---------------------------------------------------------------
     // Sidebar button: "Login" or "Logout" depending on state
@@ -443,13 +414,6 @@
 
         el.dashManualInput.addEventListener('focus', function () {
             this.select();
-        });
-
-        // NOTE (Step 7): this listener is now inert — see the matching
-        // note in admin.js's wireEvents(). Left in place; cleanup is
-        // part of Step 9's broader pass.
-        window.addEventListener('storage', function (e) {
-            if (e.key === 'jsq.users') { scheduleUsersReconcile(); }
         });
     }
 

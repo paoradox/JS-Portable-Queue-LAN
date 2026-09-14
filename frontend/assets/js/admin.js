@@ -6,15 +6,12 @@
 (function (window, document) {
     'use strict';
 
-    var STORAGE_RECONCILE_DEBOUNCE_MS = 75;
-
     var session = null;
     var el = {};
     var editTargetUserId = null;
     var resetTargetUserId = null;
     var passwordConfirmCallback = null;
     var stopClock = null;
-    var sessionReconcileTimer = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -254,10 +251,6 @@
             console.error('admin.js: logout request failed', err);
         }).then(function () {
             if (stopClock) { stopClock(); stopClock = null; }
-            if (sessionReconcileTimer) {
-                window.clearTimeout(sessionReconcileTimer);
-                sessionReconcileTimer = null;
-            }
             window.location.href = 'index.html';
         });
     }
@@ -853,33 +846,12 @@
         downloadCsv('monthly-report-' + fileMonthStamp() + '.csv', rows.join(''));
     }
 
-    // ---------------------------------------------------------------
-    // Cross-tab reaction to user changes
-    // ---------------------------------------------------------------
-
-    function handleUsersStorageChange() {
-        session = window.JSQ_Auth.getSession();
-        if (!session) {
-            window.location.href = 'index.html';
-            return;
-        }
-        if (!session.isAdmin) {
-            el.noAccessGate.classList.remove('d-none');
-            return;
-        }
-        renderSessionLabels();
-        renderUsers();
-    }
-
-    function scheduleUsersReconcile() {
-        if (sessionReconcileTimer) {
-            window.clearTimeout(sessionReconcileTimer);
-        }
-        sessionReconcileTimer = window.setTimeout(function () {
-            sessionReconcileTimer = null;
-            handleUsersStorageChange();
-        }, STORAGE_RECONCILE_DEBOUNCE_MS);
-    }
+    // Step 9 cleanup: the "cross-tab reaction to user changes" block
+    // that used to live here (handleUsersStorageChange /
+    // scheduleUsersReconcile) reacted to the browser's native
+    // 'storage' event on the 'jsq.users' localStorage key. User data
+    // hasn't lived in localStorage since Step 7, so that event could
+    // never fire again — removed along with the listener below.
 
     // ---------------------------------------------------------------
     // Event wiring
@@ -956,17 +928,6 @@
         el.clearLogBtn.addEventListener('click', handleClearLog);
         el.exportLogBtn.addEventListener('click', handleExportLog);
         el.exportReportBtn.addEventListener('click', handleExportReport);
-
-        // NOTE (Step 7): this listener is now inert. It reacted to the
-        // browser's native 'storage' event, which only ever fires for
-        // OTHER TABS on localStorage keys — but user data no longer
-        // lives in localStorage at all (it's server-side now), so
-        // 'jsq.users' will never change there again. Left in place
-        // rather than removed mid-step; cleaning up dead code like
-        // this belongs with Step 9's broader admin.js pass.
-        window.addEventListener('storage', function (e) {
-            if (e.key === 'jsq.users') { scheduleUsersReconcile(); }
-        });
     }
 
     // ---------------------------------------------------------------
@@ -1051,10 +1012,6 @@
 
     window.addEventListener('beforeunload', function () {
         if (stopClock) { stopClock(); stopClock = null; }
-        if (sessionReconcileTimer) {
-            window.clearTimeout(sessionReconcileTimer);
-            sessionReconcileTimer = null;
-        }
     });
 
 })(window, document);
