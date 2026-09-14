@@ -69,6 +69,34 @@
         padding: 0.5rem 1rem;
         min-width: 90px;
       }
+
+      /* Time badge on small/phone screens: the full date+time text
+         ("Mon, Sep 14 · 10:09:56 AM") kept its normal desktop size
+         and ran past the edge of narrow viewports instead of shrinking
+         to fit. Smaller font/padding here, plus tighter spacing on the
+         rest of the navbar so the badge has more room to work with. */
+      @media (max-width: 576px) {
+        .navbar .container-fluid {
+          padding-left: 0.5rem;
+          padding-right: 0.5rem;
+          flex-wrap: nowrap;
+        }
+        .navbar .nav-link {
+          padding-left: 0.25rem;
+          padding-right: 0.25rem;
+        }
+        #datetime {
+          font-size: 0.68rem;
+          padding: 0.3em 0.55em;
+          white-space: nowrap;
+        }
+      }
+      @media (max-width: 380px) {
+        #datetime {
+          font-size: 0.6rem;
+          padding: 0.25em 0.45em;
+        }
+      }
     </style>
   </head>
 
