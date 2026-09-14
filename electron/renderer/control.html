@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Queue Server</title>
+  <style>
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: #f5f6f8;
+      color: #212529;
+      margin: 0;
+      padding: 24px;
+    }
+    h1 {
+      font-size: 1.15rem;
+      margin: 0 0 4px;
+      color: #134087;
+    }
+    .status {
+      font-size: 0.85rem;
+      color: #198754;
+      margin-bottom: 18px;
+    }
+    .url-box {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .url-box input {
+      flex: 1;
+      font-family: monospace;
+      font-size: 0.85rem;
+      padding: 6px 8px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      background: #fff;
+    }
+    button {
+      font-size: 0.85rem;
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid #134087;
+      background: #134087;
+      color: #fff;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #fff;
+      color: #134087;
+    }
+    .shortcuts {
+      display: flex;
+      gap: 8px;
+      margin: 16px 0;
+    }
+    .shortcuts button {
+      flex: 1;
+    }
+    .port-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-top: 20px;
+      border-top: 1px solid #dee2e6;
+      padding-top: 16px;
+    }
+    .port-row input {
+      width: 80px;
+      padding: 6px 8px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+    }
+    .port-message {
+      font-size: 0.8rem;
+      margin-top: 8px;
+      min-height: 1em;
+    }
+    .port-message.error { color: #dc3545; }
+    .port-message.ok { color: #198754; }
+    .hint {
+      font-size: 0.75rem;
+      color: #6c757d;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Queue Server Running</h1>
+  <div class="status" id="statusLine">Starting…</div>
+
+  <div id="urlList"></div>
+  <div class="hint">Other devices on the same Wi-Fi/Ethernet network use one of these URLs.</div>
+
+  <div class="shortcuts">
+    <button id="openDisplayBtn" class="secondary">Open Display Screen</button>
+    <button id="openAdminBtn" class="secondary">Open Admin Panel</button>
+  </div>
+
+  <div class="port-row">
+    <label for="portInput">Port:</label>
+    <input type="number" id="portInput" min="1" max="65535" />
+    <button id="changePortBtn" class="secondary">Change port</button>
+  </div>
+  <div class="port-message" id="portMessage"></div>
+
+  <script src="control.js"></script>
+</body>
+</html>
