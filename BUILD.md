@@ -1,66 +1,122 @@
-# Building "Portable Queue" (the desktop app)
+# Building QueueServer.exe
 
-This covers turning the project into a double-clickable desktop app for
-the one machine that hosts the queue system on your LAN. Every other
-device (staff phones/laptops, the public display) still just opens a
-normal web browser — nothing here applies to them.
-
-## Two different things this project can run as
+This project can run three different ways. Pick whichever fits what
+you're doing:
 
 | Mode | Command | What it is |
 |---|---|---|
-| Plain server | `npm start` | Runs in a terminal, no window. Same as every step so far. |
-| Desktop app (dev mode) | `npm run electron` | Runs the exact same server, but inside an Electron window with the control panel (Steps 1–10). Good for testing before building a real distributable. |
-| Desktop app (built) | see below | A folder you can copy anywhere (a USB drive, a shared folder, wherever) containing `Portable Queue.exe` and everything it needs. This is what you'd actually hand to someone, or leave running on the host machine long-term. |
+| Plain server | `npm start` | Runs in a terminal, no window. Good for quick testing. |
+| Desktop app, dev mode | `npm run electron` | Same server, inside the Electron control window. Good for testing the desktop experience without building anything. |
+| Desktop app, built | `QueueServer.exe` (built once, see below) | What you actually run day to day on the host machine. |
+
+Every mode runs the exact same `server/` and `frontend/` code — nothing
+is duplicated or reimplemented between them.
+
+## How this app is laid out (read this before building)
+
+`QueueServer.exe` does **not** contain its own private copy of your
+server or frontend code. It's a small launcher that reads `server/`
+and `frontend/` from wherever it's actually sitting on disk. That
+means the exe must live directly inside the project folder, next to
+`server/`, `frontend/`, and `database/`:
+
+```
+JS-Portable-Queue-LAN/
+├─ QueueServer.exe        <- built once (see below), lives here permanently
+├─ resources/              <- Electron's own runtime files (see note below)
+├─ locales/                <- also Electron's runtime, not app code
+├─ *.dll / *.pak / ...      <- also Electron's runtime, not app code
+│
+├─ electron/               <- the launcher's own source (main.js, preload.js, control window)
+├─ server/                 <- Express + Socket.IO + SQLite backend
+├─ frontend/               <- the actual web pages (index.html, encoder.html, admin.html, etc.)
+├─ database/
+│  └─ queue.db             <- created automatically on first launch
+├─ node_modules/           <- express, socket.io, bcryptjs, cookie-parser
+├─ package.json
+└─ package-lock.json
+```
+
+**Why this matters day to day:** editing anything in `server/` or
+`frontend/` takes effect the next time you launch `QueueServer.exe` —
+no rebuild, ever. You only need to rebuild if you change
+`electron/main.js`, `electron/preload.js`, or the control window's
+files in `electron/renderer/`.
+
+**About the extra files next to the exe (`resources/`, `locales/`,
+the `.dll`/`.pak` files):** those come from Electron itself, not from
+this project. Electron is built on Chromium, and Chromium doesn't ship
+as a single file — this is normal for any Electron app, not something
+specific to how this one is set up. They're a one-time byproduct of
+building; you never edit or think about them again afterward.
 
 ## Prerequisites
 
-Same as every previous step — Node.js installed, and `npm install` run
-at least once in the project root. No new prerequisites for building;
-`electron-builder` (added in this step) downloads everything else it
-needs automatically the first time you build.
+- Node.js 22.5.0 or newer (needed for `node:sqlite` — check with `node -v`)
+- Run `npm install` once in the project root
 
-## Building the distributable
+## Building QueueServer.exe (do this once, or after changing electron/ files)
 
-From the project root, on your Windows machine:
+From the project root, on Windows:
 
 ```powershell
 npm run dist
 ```
 
-This does three things:
-1. Downloads a private copy of the Electron runtime for Windows if it isn't cached yet (a one-time, few-hundred-MB download the first time).
-2. Copies `electron/`, `server/`, `frontend/`, and the production `node_modules` (not `nodemon`/`electron`/`electron-builder` themselves — those are only needed for building, not running) into an output folder.
-3. Produces `dist/win-unpacked/Portable Queue.exe`, sitting next to all its resource folders.
+This produces `dist/win-unpacked/`, containing `QueueServer.exe` plus
+Electron's runtime files. The **only** thing you need from that output
+folder is `QueueServer.exe` itself and everything else electron-builder
+put directly alongside it — copy or move it up one level so it sits
+in the project root:
 
-**The output you actually use is the whole `dist/win-unpacked/` folder**, not just the `.exe` file by itself — the `.exe` needs the `resources/` folder sitting right next to it to run. Copy that whole folder to wherever you want to keep it (Desktop, a dedicated folder, a USB drive) and double-click `Portable Queue.exe` from there.
+```powershell
+Move-Item dist\win-unpacked\* . 
+```
 
-## Why "unpacked folder" instead of a single installer file
+(On PowerShell, run that from the project root. It moves `QueueServer.exe`
+and Electron's runtime files out of `dist/win-unpacked/` and into the
+project root, where they belong — resulting in the layout shown above.)
 
-electron-builder can produce several different kinds of output — a
-traditional installer (NSIS), a single self-extracting "portable" exe,
-or this unpacked-folder style. Two reasons we're using the unpacked
-folder specifically:
+You can then delete the now-empty `dist/` folder.
 
-1. **Editable resources, as you asked for in Step 10.** `asar: false` in the packaging config means `frontend/`, `server/`, and `electron/` land as plain, individually-editable files inside `dist/win-unpacked/resources/app/` — open `admin.js` in a text editor after building and your change takes effect on the next launch, no rebuild needed. A traditional installer normally compresses everything into a single `app.asar` archive, which defeats that.
-2. **electron-builder's "portable" exe target specifically extracts itself to a temporary folder that gets deleted when you close the app.** That's fine for stateless apps, but this app's whole database would be wiped out on every single close — the opposite of what a queueing appliance needs. The unpacked-folder approach doesn't have this problem: `database/queue.db` gets created right inside `resources/app/database/` (same as it already does when you run `npm start`) and stays there permanently between launches, because nothing ever gets extracted-and-deleted.
+## Running it
 
-## What I validated (not just wrote and assumed)
+Double-click `QueueServer.exe` (or run it from a terminal, same
+thing). A control window opens showing:
 
-I can't produce or run a real `.exe` from this sandbox (no Windows, no Wine), so the actual Windows build is something you'll run yourself — but I validated the entire packaging *logic* by building and running the equivalent Linux output here, which exercises the exact same electron-builder configuration:
+- The port it's listening on
+- The LAN URL(s) other devices should use
+- Buttons to copy the URL, open the Display screen, or open the Admin panel
+- A field to change the port, if you ever need to
 
-- **Confirmed file inclusion is correct:** `express`, `socket.io`, `bcryptjs`, `cookie-parser` (production dependencies) are present in the packaged `node_modules/`; `electron`, `electron-builder`, and `nodemon` (dev-only, not needed to *run* the app) are correctly excluded.
-- **Caught and fixed a real bug in my own first attempt:** the `database/` folder didn't make it into the package at all (its only file, `.gitkeep`, is a dotfile that the packaging glob pattern silently skipped). Confirmed this is harmless — `server/db/index.js`'s existing self-healing logic (from Step 2) creates the folder automatically on first run regardless — but removed the pointless config line rather than leave misleading config in place.
-- **Confirmed the executable name comes out exactly right.** Windows and Linux/Mac don't agree by default on whether the built executable is named after `productName` or the internal `name` field — added `executableName: "Portable Queue"` to the config specifically to remove that ambiguity, then rebuilt and confirmed the output file is literally named `Portable Queue` (Linux) / would be `Portable Queue.exe` (Windows, same mechanism).
-- **Ran the actual built executable** (not the dev-mode version) under a virtual display and took a real screenshot — control window rendered correctly, LAN IP detected, database created at the correct path inside the packaged folder structure, server started cleanly with no port conflicts.
+`database/queue.db` is created automatically the first time you run
+it, and persists in that same folder across every future launch —
+closing and reopening the app never touches it.
 
-## Rebuilding after making code changes
+## Changing the port
 
-Because resources are unpacked (not bundled into `app.asar`), most
-changes to `frontend/` files take effect immediately — just close and
-reopen `Portable Queue.exe`, no rebuild needed. Changes to `server/` or
-`electron/` files also take effect the same way, for the same reason.
+Two ways:
+- **From the app:** type a new port in the control window and click "Change port."
+- **By hand:** edit `electron-settings.json` in the project root (created after first launch) and restart the app.
 
-You only need to re-run `npm run dist` when you've changed
-`package.json`'s dependencies (added/removed an npm package) or the
-`"build"` config itself.
+If the saved/default port (3000) is already in use by something else,
+the app automatically tries the next ones (3001, 3002, ...) instead of
+failing to start.
+
+## Rebuilding after code changes
+
+| You changed... | Do you need to rebuild? |
+|---|---|
+| Anything in `frontend/` | No — just relaunch `QueueServer.exe` |
+| Anything in `server/` | No — just relaunch `QueueServer.exe` |
+| `electron/main.js`, `electron/preload.js`, or `electron/renderer/*` | Yes — run `npm run dist` again and replace the exe + its runtime files |
+| `package.json`'s dependencies (added/removed an npm package) | Run `npm install`, then relaunch (or rebuild if you also touched `electron/`) |
+
+## Distributing this to another machine
+
+Copy the entire project folder — `server/`, `frontend/`, `electron/`,
+`node_modules/`, `QueueServer.exe` and its runtime files, `package.json` —
+to the new machine. `database/` can be included (to carry existing
+data over) or left out (a fresh one is created automatically on first
+launch). There's no installer and nothing to register with Windows;
+it runs the moment you double-click the exe.

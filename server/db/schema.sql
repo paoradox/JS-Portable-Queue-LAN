@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS queue_counters (
     pool         TEXT NOT NULL REFERENCES queue_pools(name),
     value        INTEGER,
     updated_at   TEXT,
-    updated_by   TEXT REFERENCES users(id)
+    updated_by   TEXT REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- ---------------------------------------------------------------

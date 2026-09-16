@@ -4,11 +4,13 @@ node_modules/
 # Generated SQLite database (created automatically on first server run)
 database/*.db
 database/*.sqlite
+dist/win-unpacked/resources/app/database/*.db
+dist/win-unpacked/resources/app/database/*.sqlite
 
 # Environment / secrets (added in Step 3 when auth introduces a session secret)
 .env
 
-# Electron packaging output (added in Step 10)
+# Electron packaging output
 electron/dist/
 electron/out/
 

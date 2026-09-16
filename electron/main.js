@@ -1,25 +1,32 @@
 /*
- * electron/main.js — Electron main process (Step 10 of the LAN
- * migration).
+ * electron/main.js — Electron main process for Queue Server.
+ *
+ * IMPORTANT — this app does NOT bundle a copy of server/ or frontend/
+ * inside itself. It reads them from the folder it's actually placed
+ * in. That means:
+ *   - QueueServer.exe must sit directly inside the project folder,
+ *     next to server/, frontend/, and database/ (see BUILD.md).
+ *   - Editing any file in server/ or frontend/ takes effect the next
+ *     time you launch the app — no rebuild, ever, for those changes.
+ *   - The exe only needs rebuilding if electron/main.js, preload.js,
+ *     or renderer/*.js themselves change.
  *
  * What this file does:
- *   1. Starts the EXACT SAME server code as `npm start` (server/index.js's
- *      exported start() function) — nothing about the server itself is
- *      duplicated or reimplemented here.
+ *   1. Works out where the project folder actually is (see
+ *      getProjectRoot() below — different in dev mode vs. the built
+ *      exe), then starts server/index.js's exported start() function
+ *      FROM THAT LOCATION. The server code itself is completely
+ *      unaware this is happening — it's the same file whether it's
+ *      run via `npm start`, `npm run electron`, or the built exe.
  *   2. Picks a port: tries the last-used port (saved in a small JSON
- *      settings file), and if that port is taken by something else,
- *      automatically tries the next ones instead of just crashing.
+ *      settings file next to the exe), and if that port is taken by
+ *      something else, automatically tries the next ones instead of
+ *      just crashing.
  *   3. Detects the host machine's LAN IP address(es), so other devices
  *      on the same network know what URL to open in their browser.
  *   4. Opens a small control window showing that connection info, with
  *      buttons to copy the URL and open the Display/Admin pages, plus
  *      a way to change the port if you ever need a specific one.
- *
- * What this file deliberately does NOT do: bundle frontend/server code
- * into a compressed .asar archive. Keeping everything as plain,
- * editable files (same as running `npm start` directly) was your
- * explicit choice — see Step 11 for how that's reflected in the
- * packaging config.
  */
 
 'use strict';
@@ -29,11 +36,51 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const { start } = require('../server/index.js');
+// ---------------------------------------------------------------
+// Where's the actual project folder? This is the one piece that
+// differs between "running from source" and "running the built exe" —
+// everything else in this file is identical either way.
+// ---------------------------------------------------------------
+
+function getProjectRoot() {
+    if (app.isPackaged) {
+        // Built exe: QueueServer.exe sits directly in the project
+        // folder (next to server/, frontend/, database/), so the
+        // project root is just wherever the exe itself is.
+        return path.dirname(process.execPath);
+    }
+    // Dev mode (`npm run electron`): electron/main.js's own folder is
+    // already one level inside the real project root.
+    return path.join(__dirname, '..');
+}
+
+const PROJECT_ROOT = getProjectRoot();
+const SERVER_ENTRY = path.join(PROJECT_ROOT, 'server', 'index.js');
+
+if (!fs.existsSync(SERVER_ENTRY)) {
+    // A clear, specific error beats a cryptic MODULE_NOT_FOUND crash —
+    // this is almost always "the exe got moved away from the project
+    // folder" or "server/ is missing/renamed".
+    console.error(
+        'Queue Server: could not find server/index.js at ' + SERVER_ENTRY + '.\n' +
+        'QueueServer.exe must be placed directly inside the project folder, ' +
+        'next to the server/, frontend/, and database/ folders. See BUILD.md.'
+    );
+    app.whenReady().then(() => { app.quit(); });
+} else {
+    startApp();
+}
+
+function startApp() {
+
+const { start } = require(SERVER_ENTRY);
 
 const DEFAULT_PORT = 3000;
 const MAX_PORT_ATTEMPTS = 20;
-const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
+// Settings live right next to the exe/project folder (not tucked away
+// in an OS-specific per-user folder) — same "everything is one visible,
+// editable folder" idea as the rest of this project.
+const SETTINGS_PATH = path.join(PROJECT_ROOT, 'electron-settings.json');
 
 // currentServer holds whatever start() last resolved with:
 // { port, httpServer, io }. Kept at module scope so changePort() can
@@ -241,3 +288,5 @@ app.on('window-all-closed', () => {
         app.quit();
     }
 });
+
+} // end startApp()
