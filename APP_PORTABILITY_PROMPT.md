@@ -20,13 +20,18 @@ app logic of its own), and have it read your actual server and frontend code
 from the real project folder on disk, at runtime. The launcher and your app
 code live side by side, not one bundled inside the other.
 
-## Part 0 — Reorganizing an existing project into this layout
+## Part 0 — Getting to the target Node.js/Express layout
 
-Most existing projects won't already match the folder structure this pattern
-expects. Before touching any Electron code, reorganize to this target shape
-first (adjust names only where marked — everything else, including the
-literal folder name `frontend`, should stay exactly as shown regardless of
-what the source project currently calls things):
+Everything from Part A onward assumes a `server/index.js` that exports a
+`start(port)` function and a `frontend/` folder it serves as static files.
+Which of the two paths below you need depends on what you're starting from.
+
+### 0a. If you already have a Node.js/Express backend
+
+Reorganize to this target shape first (adjust names only where marked —
+everything else, including the literal folder name `frontend`, should stay
+exactly as shown regardless of what the source project currently calls
+things):
 
 **A common starting point** (frontend HTML/CSS/JS in a folder called `src`,
 or sometimes `public`/`client`/`www` — naming varies a lot project to
@@ -71,7 +76,7 @@ my-project/                 (AFTER)
 (`launcher/` isn't shown here — it doesn't exist yet at this stage; it's
 created later, in Part E, from the build output.)
 
-### Reorganization checklist
+**Reorganization checklist:**
 
 1. **Rename your frontend folder to `frontend/`**, whatever it's currently
    called (`src`, `public`, `client`, `www`, etc.). Use this exact name —
@@ -98,7 +103,7 @@ created later, in Part E, from the build output.)
    (Path depth depends on where in `server/` that line actually lives —
    adjust the number of `'..'` segments accordingly.)
 
-### What does NOT need changing (a common over-correction to avoid)
+**What does NOT need changing** (a common over-correction to avoid):
 
 - **`<script src="...">` / `<link href="...">` paths inside your HTML files**
   that are relative to the HTML file itself (e.g. `assets/js/app.js`) don't
@@ -112,23 +117,159 @@ created later, in Part E, from the build output.)
   `frontend/` changed too (files actually moved relative to each other), not
   just because the outer container folder got renamed.
 
-### Also check
+**Also check:** npm scripts referencing the old folder name, `.gitignore`
+entries pointing at old paths, and any hardcoded paths elsewhere in your
+code — search the whole project for the old folder name once done.
 
-- Any npm scripts referencing the old folder name (`"build": "vite src/"` →
-  `"build": "vite frontend/"`, etc.)
-- `.gitignore` entries pointing at old paths (e.g. a `src/uploads/` ignore
-  rule)
-- Any hardcoded absolute or relative paths elsewhere in your code — search
-  the whole project for the old folder name as a sanity check once done
+### 0b. If you're starting from a plain HTML/CSS/JS site with no backend at all
+
+Build a minimal Node.js + Express + Socket.IO + SQLite backend first, then
+treat it as your `server/` folder going forward — everything from Part A
+onward applies unchanged once this exists.
+
+**Prerequisites:** Node.js 22.5.0 or newer (`node -v` to check) — this
+skeleton uses the `node:sqlite` module built into Node itself, so there's no
+native compiling and no extra database package to install.
+
+**1. Move your existing files into `frontend/`** (if they're currently loose
+in the project root):
+
+```bash
+mkdir frontend
+mv *.html *.css assets frontend/
+```
+
+**2. Initialize the Node project and install dependencies:**
+
+```bash
+npm init -y
+npm install express socket.io
+```
+
+**3. Create `server/index.js`** — serves `frontend/` as static files, wires
+up Socket.IO, and exports the same `start(port)` shape Part A needs:
+
+```javascript
+'use strict';
+const path = require('path');
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+require('./db'); // opens/creates the database on startup — see step 4
+
+function start(port) {
+    return new Promise((resolve, reject) => {
+        const app = express();
+        app.use(express.json());
+        app.use(express.static(path.join(__dirname, '..', 'frontend')));
+
+        const httpServer = http.createServer(app);
+        const io = new Server(httpServer);
+
+        io.on('connection', (socket) => {
+            console.log('Client connected:', socket.id);
+            // Add your app's real-time events here — e.g.
+            // socket.emit('initialState', getCurrentState());
+        });
+
+        // Broadcast to every connected client whenever your app's data
+        // changes. Call this from wherever your API routes below
+        // actually mutate something.
+        function broadcastUpdate(payload) {
+            io.emit('update', payload);
+        }
+
+        // Add your app's REST routes here, e.g.:
+        // app.get('/api/items', (req, res) => { ... });
+        // app.post('/api/items', (req, res) => {
+        //     ... db.prepare(...).run(...) ...
+        //     broadcastUpdate(newState);
+        //     res.json({ ok: true });
+        // });
+
+        httpServer.once('error', reject);
+        httpServer.listen(port, () => resolve({ port, httpServer, io }));
+    });
+}
+
+module.exports = { start };
+
+if (require.main === module) {
+    start(process.env.PORT || 3000).catch((err) => {
+        console.error(err);
+        process.exit(1);
+    });
+}
+```
+
+**4. Create `server/db/index.js`** — opens (or creates) a SQLite database
+automatically on first launch, using Node's built-in `node:sqlite` (no npm
+package needed):
+
+```javascript
+'use strict';
+const path = require('path');
+const fs = require('fs');
+const { DatabaseSync } = require('node:sqlite');
+
+const DB_DIR = path.join(__dirname, '..', '..', 'database');
+const DB_PATH = path.join(DB_DIR, 'data.db');
+
+if (!fs.existsSync(DB_DIR)) { fs.mkdirSync(DB_DIR, { recursive: true }); }
+
+const db = new DatabaseSync(DB_PATH);
+db.exec('PRAGMA journal_mode = WAL');
+db.exec('PRAGMA foreign_keys = ON');
+
+// Replace this placeholder with your actual project's tables — this is
+// the one piece of Part 0b that's necessarily specific to each project.
+db.exec(`
+    CREATE TABLE IF NOT EXISTS items (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )
+`);
+
+module.exports = { db };
+```
+
+**5. Update the frontend to talk to this backend** — if it previously used
+`localStorage`, replace those calls with `fetch()` calls to your new
+`/api/...` routes, and add a Socket.IO client listener for live updates:
+
+```html
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    socket.on('update', (payload) => {
+        // re-render whatever part of the page shows this data
+    });
+</script>
+```
+
+**6. Add the run script** to `package.json`:
+
+```json
+"scripts": {
+    "start": "node server/index.js"
+}
+```
+
+Once this is in place, `server/index.js` exists, exports `start(port)`, and
+serves `frontend/` — exactly what the rest of this prompt (Part A onward)
+expects. Continue from Part A.
 
 ## Part A — Reading your app from outside the bundle
 
 **1. Restructure the server entry point to be requireable, not just runnable.**
 
-Your existing `server.js`/`app.js`/`index.js` almost certainly starts
-listening immediately when run. Change it to export a `start(port)` function
-that returns a Promise (resolving once listening, rejecting on failure such
-as the port being taken) — and only auto-start when the file is run directly:
+If you followed 0b above, `server/index.js` already does this. If you're
+coming from 0a with an existing server, your existing `server.js`/`app.js`/
+`index.js` almost certainly starts listening immediately when run — change
+it to export a `start(port)` function that returns a Promise (resolving once
+listening, rejecting on failure such as the port being taken), and only
+auto-start when the file is run directly:
 
 ```javascript
 function start(port) {
@@ -445,7 +586,7 @@ fixed depth, this works with zero code changes — the executable finds your
 
 ```text
 my-project/
-├─ launcher/                <- QueueServer.exe-equivalent + Electron's runtime files
+├─ launcher/                <- the built exe + Electron's runtime files
 ├─ electron/
 ├─ server/
 ├─ frontend/
@@ -490,14 +631,16 @@ function saveSettings(settings) {
 
 ## Adapting this to a different project
 
-Four things to change per project:
-1. Your existing folder structure reorganized per Part 0, if it doesn't
-   already match.
-2. The check in Part A step 2 (`server/index.js` → your actual server entry
+Five things to check per project:
+1. Whether you need Part 0a (reorganize an existing backend) or Part 0b
+   (build one from scratch for a plain HTML/CSS/JS site).
+2. Your existing folder structure reorganized to match, if it doesn't
+   already.
+3. The check in Part A step 2 (`server/index.js` → your actual server entry
    point, if you named it differently).
-3. The `SHORTCUTS` array in Part D step 6 — your app's actual important
+4. The `SHORTCUTS` array in Part D step 6 — your app's actual important
    pages.
-4. `productName`/`executableName` in Part E step 10.
+5. `productName`/`executableName` in Part E step 10.
 
 Everything else (port logic, LAN detection, the control window's structure,
 the packaging config) is copy-paste reusable as-is.
