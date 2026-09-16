@@ -15,24 +15,30 @@ is duplicated or reimplemented between them.
 ## How this app is laid out (read this before building)
 
 `QueueServer.exe` does **not** contain its own private copy of your
-server or frontend code. It's a small launcher that reads `server/`
-and `frontend/` from wherever it's actually sitting on disk. That
-means the exe must live directly inside the project folder, next to
-`server/`, `frontend/`, and `database/`:
+server or frontend code. It's a small launcher that finds and reads
+`server/` and `frontend/` by searching upward from wherever it's
+actually running — so it works whether the exe sits in the project
+root or in its own subfolder. **Recommended:** keep it in a
+`launcher/` subfolder, since Electron brings a fair amount of its own
+runtime clutter (locales, DLLs, resource packs) that has nothing to do
+with your app code — tucking that away keeps the actual project root
+readable:
 
 ```
 JS-Portable-Queue-LAN/
-├─ QueueServer.exe        <- built once (see below), lives here permanently
-├─ resources/              <- Electron's own runtime files (see note below)
-├─ locales/                <- also Electron's runtime, not app code
-├─ *.dll / *.pak / ...      <- also Electron's runtime, not app code
+├─ launcher/                <- everything Electron-specific lives here
+│  ├─ QueueServer.exe
+│  ├─ resources/            <- Electron's own runtime files
+│  ├─ locales/              <- also Electron's runtime, not app code
+│  └─ *.dll / *.pak / ...    <- also Electron's runtime, not app code
 │
-├─ electron/               <- the launcher's own source (main.js, preload.js, control window)
-├─ server/                 <- Express + Socket.IO + SQLite backend
-├─ frontend/               <- the actual web pages (index.html, encoder.html, admin.html, etc.)
+├─ electron/                <- the launcher's own SOURCE code (main.js, preload.js, control window) — not the same as launcher/ above
+├─ server/                  <- Express + Socket.IO + SQLite backend
+├─ frontend/                <- the actual web pages (index.html, encoder.html, admin.html, etc.)
 ├─ database/
-│  └─ queue.db             <- created automatically on first launch
-├─ node_modules/           <- express, socket.io, bcryptjs, cookie-parser
+│  └─ queue.db              <- created automatically on first launch
+├─ node_modules/            <- express, socket.io, bcryptjs, cookie-parser
+├─ electron-settings.json   <- created automatically (saved port)
 ├─ package.json
 └─ package-lock.json
 ```
@@ -43,12 +49,17 @@ no rebuild, ever. You only need to rebuild if you change
 `electron/main.js`, `electron/preload.js`, or the control window's
 files in `electron/renderer/`.
 
-**About the extra files next to the exe (`resources/`, `locales/`,
-the `.dll`/`.pak` files):** those come from Electron itself, not from
-this project. Electron is built on Chromium, and Chromium doesn't ship
-as a single file — this is normal for any Electron app, not something
-specific to how this one is set up. They're a one-time byproduct of
-building; you never edit or think about them again afterward.
+**About `launcher/`'s contents:** everything in there comes from
+Electron itself, not from this project. Electron is built on Chromium,
+and Chromium doesn't ship as a single file — this is normal for any
+Electron app, not something specific to how this one is set up.
+They're a one-time byproduct of building; you never edit or think
+about them again afterward.
+
+**You're not required to use a `launcher/` subfolder** — the exe finds
+the real project root by searching upward, so it also works fine
+sitting directly in the project root if you'd rather not have the
+extra folder. The subfolder is just a tidiness choice.
 
 ## Prerequisites
 
@@ -64,25 +75,26 @@ npm run dist
 ```
 
 This produces `dist/win-unpacked/`, containing `QueueServer.exe` plus
-Electron's runtime files. The **only** thing you need from that output
-folder is `QueueServer.exe` itself and everything else electron-builder
-put directly alongside it — copy or move it up one level so it sits
-in the project root:
+Electron's runtime files. Move that whole folder's contents into a
+`launcher/` subfolder in your project root:
 
 ```powershell
-Move-Item dist\win-unpacked\* . 
+New-Item -ItemType Directory -Force -Path launcher
+Move-Item dist\win-unpacked\* launcher\
 ```
 
-(On PowerShell, run that from the project root. It moves `QueueServer.exe`
-and Electron's runtime files out of `dist/win-unpacked/` and into the
-project root, where they belong — resulting in the layout shown above.)
+(Run that from the project root. It creates `launcher/` if it doesn't
+exist yet, then moves `QueueServer.exe` and Electron's runtime files
+into it — resulting in the layout shown above. Prefer the exe directly
+in the project root instead? Skip the `launcher\` folder and move
+straight into `.` — the exe finds the project root either way.)
 
 You can then delete the now-empty `dist/` folder.
 
 ## Running it
 
-Double-click `QueueServer.exe` (or run it from a terminal, same
-thing). A control window opens showing:
+Double-click `launcher\QueueServer.exe` (or run it from a terminal,
+same thing). A control window opens showing:
 
 - The port it's listening on
 - The LAN URL(s) other devices should use
@@ -107,16 +119,16 @@ failing to start.
 
 | You changed... | Do you need to rebuild? |
 |---|---|
-| Anything in `frontend/` | No — just relaunch `QueueServer.exe` |
-| Anything in `server/` | No — just relaunch `QueueServer.exe` |
-| `electron/main.js`, `electron/preload.js`, or `electron/renderer/*` | Yes — run `npm run dist` again and replace the exe + its runtime files |
+| Anything in `frontend/` | No — just relaunch `launcher\QueueServer.exe` |
+| Anything in `server/` | No — just relaunch `launcher\QueueServer.exe` |
+| `electron/main.js`, `electron/preload.js`, or `electron/renderer/*` | Yes — run `npm run dist` again and replace the contents of `launcher/` |
 | `package.json`'s dependencies (added/removed an npm package) | Run `npm install`, then relaunch (or rebuild if you also touched `electron/`) |
 
 ## Distributing this to another machine
 
 Copy the entire project folder — `server/`, `frontend/`, `electron/`,
-`node_modules/`, `QueueServer.exe` and its runtime files, `package.json` —
-to the new machine. `database/` can be included (to carry existing
-data over) or left out (a fresh one is created automatically on first
-launch). There's no installer and nothing to register with Windows;
-it runs the moment you double-click the exe.
+`launcher/`, `node_modules/`, `package.json` — to the new machine.
+`database/` can be included (to carry existing data over) or left out
+(a fresh one is created automatically on first launch). There's no
+installer and nothing to register with Windows; it runs the moment you
+double-click `launcher\QueueServer.exe`.

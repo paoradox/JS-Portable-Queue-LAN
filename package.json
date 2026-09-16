@@ -28,18 +28,16 @@
   },
   "build": {
     "appId": "com.paoradox.jsportablequeuelan",
-    "productName": "Portable Queue",
-    "executableName": "Portable Queue",
+    "productName": "Queue Server",
+    "executableName": "QueueServer",
     "asar": false,
     "directories": {
       "output": "dist"
     },
     "files": [
       "electron/**/*",
-      "server/**/*",
-      "frontend/**/*",
-      "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/**/*"
     ],
     "win": {
       "target": "dir"

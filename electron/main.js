@@ -2,10 +2,12 @@
  * electron/main.js — Electron main process for Queue Server.
  *
  * IMPORTANT — this app does NOT bundle a copy of server/ or frontend/
- * inside itself. It reads them from the folder it's actually placed
- * in. That means:
- *   - QueueServer.exe must sit directly inside the project folder,
- *     next to server/, frontend/, and database/ (see BUILD.md).
+ * inside itself. It reads them from the real project folder, found by
+ * searching upward from wherever the exe is (see findProjectRoot()
+ * below) — so the exe can sit directly in the project root, or tucked
+ * into its own subfolder (e.g. "launcher/", to keep Electron's runtime
+ * files out of the main project folder), whichever you prefer. That
+ * means:
  *   - Editing any file in server/ or frontend/ takes effect the next
  *     time you launch the app — no rebuild, ever, for those changes.
  *   - The exe only needs rebuilding if electron/main.js, preload.js,
@@ -42,16 +44,36 @@ const os = require('os');
 // everything else in this file is identical either way.
 // ---------------------------------------------------------------
 
-function getProjectRoot() {
-    if (app.isPackaged) {
-        // Built exe: QueueServer.exe sits directly in the project
-        // folder (next to server/, frontend/, database/), so the
-        // project root is just wherever the exe itself is.
-        return path.dirname(process.execPath);
+// ---------------------------------------------------------------
+// Where's the actual project folder? Rather than assuming a fixed
+// folder depth (e.g. "always one level up"), this walks upward from
+// wherever the exe actually is until it finds a folder containing
+// server/index.js. That means QueueServer.exe can sit in a "launcher/"
+// subfolder (keeping Electron's own runtime clutter — locales/,
+// resources/, the various .dll/.pak files — out of the project root),
+// or directly in the project root, or a couple of folders deep if you
+// ever reorganize — it finds the right place either way, with nothing
+// to configure.
+// ---------------------------------------------------------------
+
+function findProjectRoot(startDir) {
+    let dir = startDir;
+    for (let i = 0; i < 6; i++) { // safety limit — 6 levels is more than enough
+        if (fs.existsSync(path.join(dir, 'server', 'index.js'))) {
+            return dir;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) { break; } // reached the filesystem root, stop
+        dir = parent;
     }
-    // Dev mode (`npm run electron`): electron/main.js's own folder is
-    // already one level inside the real project root.
-    return path.join(__dirname, '..');
+    return startDir; // not found — falls through to the clear error below
+}
+
+function getProjectRoot() {
+    const startDir = app.isPackaged
+        ? path.dirname(process.execPath)   // built exe: wherever it's running from
+        : path.join(__dirname, '..');      // dev mode: electron/main.js's own folder is already inside the project root
+    return findProjectRoot(startDir);
 }
 
 const PROJECT_ROOT = getProjectRoot();
@@ -59,12 +81,14 @@ const SERVER_ENTRY = path.join(PROJECT_ROOT, 'server', 'index.js');
 
 if (!fs.existsSync(SERVER_ENTRY)) {
     // A clear, specific error beats a cryptic MODULE_NOT_FOUND crash —
-    // this is almost always "the exe got moved away from the project
-    // folder" or "server/ is missing/renamed".
+    // this means server/ genuinely isn't findable anywhere within 6
+    // folder levels above the exe, which almost always means the
+    // launcher got separated from the rest of the project entirely.
     console.error(
-        'Queue Server: could not find server/index.js at ' + SERVER_ENTRY + '.\n' +
-        'QueueServer.exe must be placed directly inside the project folder, ' +
-        'next to the server/, frontend/, and database/ folders. See BUILD.md.'
+        'Queue Server: could not find a server/ folder anywhere above ' + path.dirname(process.execPath) + '.\n' +
+        'Make sure QueueServer.exe (and its folder, if you put it in one) ' +
+        'stays inside the project, alongside server/, frontend/, and ' +
+        'database/. See BUILD.md.'
     );
     app.whenReady().then(() => { app.quit(); });
 } else {
