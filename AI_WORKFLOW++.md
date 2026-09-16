@@ -10,7 +10,7 @@ Single-file AI operating spec combining consistent coding behavior, on-demand RE
 | Project Name | `[JS-Portable-Queue-LAN]` |
 | Repository Type | `[Application]` |
 | Language(s) | `[HTML, CSS, JAVASCRIPT]` |
-| Framework(s) | `[BOOTSTRAP 5, NODEJS, ELECTRON]` |
+| Framework(s) | `[BOOTSTRAP 5, NODEJS, EXPRESS, ELECTRON]` |
 | Database | `[LOCAL STORAGE, SQLITE]` |
 | Package Manager | `[npm]` |
 | Testing Framework | `[NONE]` |
