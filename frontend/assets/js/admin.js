@@ -993,6 +993,18 @@
     // renderLog()'s empty cache just shows "No actions logged yet."
     // until the next real update arrives over Socket.IO.
     function start() {
+        // NEW: if this account gets logged in elsewhere, this session
+        // becomes invalid — the next API call fails with 401, which
+        // apiClient.js catches centrally and calls this. Reloading is
+        // the simplest correct response: on reload, JSQ_Auth.init()
+        // runs again, finds no valid session (it's gone server-side
+        // too), and boot()'s own existing guard shows the login gate —
+        // reusing logic that already works, rather than writing a
+        // second "show the login screen" code path.
+        window.JSQ_ApiClient.onSessionExpired(function () {
+            window.location.reload();
+        });
+
         Promise.all([
             window.JSQ_Auth.init(),
             window.JSQ_Queue.init()

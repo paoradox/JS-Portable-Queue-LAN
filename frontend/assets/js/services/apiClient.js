@@ -12,6 +12,15 @@
  *     normal thrown Error with that same message, so calling code can
  *     just do `.catch(function (err) { showError(err.message); })`
  *     exactly like it already does with the old auth.js/queue.js.
+ *   - A session that stops being valid mid-use (someone logged into
+ *     the same account from another device, which invalidates this
+ *     one — see authService.js's login()) is detected in exactly ONE
+ *     place instead of every individual call site needing to check
+ *     for it. The server signals this specifically with a 401 status
+ *     (login failures like a wrong password use 400, never 401 — see
+ *     server/middleware/session.js — so 401 is an unambiguous "this
+ *     session is no longer valid" signal, not "this login attempt was
+ *     wrong").
  *
  * This file doesn't know anything about auth or queues specifically —
  * it's plumbing, the same way server/events.js is plumbing on the
@@ -20,9 +29,25 @@
 (function (window) {
     'use strict';
 
+    var sessionExpiredHandler = null;
+    var sessionExpiredFired = false; // fire at most once per page load
+
+    // admin.js/encoder.js register a handler for "your session just
+    // became invalid" (see onSessionExpired below). index.html never
+    // registers one, since its queue reads are public and never hit
+    // this path in the first place.
+    function onSessionExpired(handler) {
+        sessionExpiredHandler = handler;
+    }
+
     async function handleResponse(res) {
         let body = null;
         try { body = await res.json(); } catch (e) { body = null; }
+
+        if (res.status === 401 && !sessionExpiredFired) {
+            sessionExpiredFired = true;
+            if (sessionExpiredHandler) { sessionExpiredHandler(); }
+        }
 
         if (!res.ok) {
             const message = (body && body.error) ? body.error : ('Request failed (' + res.status + ').');
@@ -64,7 +89,8 @@
         get: apiGet,
         post: apiPost,
         patch: apiPatch,
-        del: apiDelete
+        del: apiDelete,
+        onSessionExpired: onSessionExpired
     };
 
 })(window);
