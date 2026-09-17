@@ -1,5 +1,8 @@
 # JS-Portable-Queue-LAN
 
+[![Website](https://img.shields.io/badge/website-offline-02aaff?style=for-the-badge&logo=githubpages)]
+[![Built with](https://img.shields.io/badge/built_with-HTML%2FCSS%2FJS-02aaff?style=for-the-badge&logo=html5)](https://developer.mozilla.org/)
+
 A multi-device, LAN-based queue management system — the network-capable evolution of [JS-Portable-Queue](https://github.com/paoradox/JS-Portable-Queue), rebuilt with a real backend so multiple devices on the same network share one live, synchronized queue.
 
 The original project ran entirely on browser `localStorage`, which meant every device had its own separate, disconnected copy of the queue data. This version replaces that storage layer with a Node.js/Express server, a SQLite database, and Socket.IO real-time sync — while keeping the exact same queueing behavior, counter mappings, and user experience the original had. It also adds a desktop wrapper (Electron) so the whole thing can run as a double-clickable app on a host machine, with every other device on the network just using a normal web browser to connect.
