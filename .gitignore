@@ -1,5 +1,7 @@
 # Dependencies (reinstalled via `npm install`, never committed)
 node_modules/
+dist/
+launcher/
 
 # Generated SQLite database (created automatically on first server run)
 database/*.db
