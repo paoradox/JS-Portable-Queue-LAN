@@ -66,6 +66,7 @@ JS-Portable-Queue-LAN/
 ├─ frontend/              ← the actual web pages
 │  ├─ assets/js/services/ ← API client, auth cache, queue cache (talks to the backend)
 │  ├─ assets/js/          ← auth.js, queue.js, admin.js, encoder.js, display.js, ui.js
+│  ├─ preview             ← preview screenshots of the system
 │  ├─ index.html
 │  ├─ encoder.html
 │  ├─ admin.html
@@ -76,6 +77,15 @@ JS-Portable-Queue-LAN/
 ├─ package.json
 └─ package-lock.json
 ```
+
+## 📸 Preview
+
+Here are some screenshots from the game, showcasing its interface and key features:
+
+### Local Web App & Desktop in Action
+| Launch Server & Setup Login | Encoding & Adaptive Display Screen | Admin Controls |
+|----------------|-------------|---------------|
+| ![Launch Server & Setup Login](frontend/preview/Launcher%20Server%20%26%20Setup%20Login.png) | ![Encoding & Adaptive Display Screen](frontend/preview/Encoding%20%26%20Adaptive%20Display%20Screen.png) | ![Admin Controls](frontend/preview/Admin%20Controls.png) |
 
 ## Running the Application
 
