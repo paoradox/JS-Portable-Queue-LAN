@@ -1,6 +1,6 @@
 # JS-Portable-Queue-LAN
 
-[![Website](https://img.shields.io/badge/website-offline-02aaff?style=for-the-badge&logo=githubpages)]
+[![Website](https://img.shields.io/badge/website-offline-02aaff?style=for-the-badge&logo=githubpages)](https://paoradox.github.io/)
 [![Built with](https://img.shields.io/badge/built_with-HTML%2FCSS%2FJS-02aaff?style=for-the-badge&logo=html5)](https://developer.mozilla.org/)
 
 A multi-device, LAN-based queue management system — the network-capable evolution of [JS-Portable-Queue](https://github.com/paoradox/JS-Portable-Queue), rebuilt with a real backend so multiple devices on the same network share one live, synchronized queue.
