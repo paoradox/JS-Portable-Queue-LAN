@@ -73,7 +73,7 @@ JS-Portable-Queue-LAN/
 │  ├─ index.html
 │  ├─ encoder.html
 │  ├─ admin.html
-│  └─ videos.txt          ← the display board's video playlist
+│  └─ videos.txt          ← the display board's video playlist (video/s for commercial, modify links here)
 ├─ database/
 │  └─ queue.db            ← created automatically on first launch
 ├─ electron-settings.json ← created automatically (saved port)
