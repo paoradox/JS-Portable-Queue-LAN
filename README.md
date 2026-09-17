@@ -109,7 +109,7 @@ npm run electron
 
 Opens the same server inside an Electron control window, showing your LAN connection URLs and shortcuts to the Display/Admin pages, without needing to build anything.
 
-### Option 3 — Built desktop app (`QueueServer.exe`)
+### Option 3 — Built windows desktop app (`QueueServer.exe`)
 
 Prerequisites: Node.js 22.5.0 or newer (`node -v` to check).
 
