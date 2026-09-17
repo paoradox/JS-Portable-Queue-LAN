@@ -616,6 +616,108 @@ function saveSettings(settings) {
 }
 ```
 
+## Part G — Optional: single-session-per-account (new login kicks out the old one)
+
+This part is **independent of the Electron-wrapping pattern above** — it
+applies to any Express app with a login/session system, whether it's wrapped
+in Electron or just running as a plain web server. Include it only if your
+app has user accounts and you want logging in from a second device to
+invalidate the first one, rather than letting the same account stay logged
+in on multiple devices at once with no awareness of each other.
+
+**Assumes:** a database-backed session system (a `sessions` table or
+equivalent, looked up per-request from a cookie/token) — not a stateless
+scheme like plain JWTs, which can't be "deleted" server-side the same way
+(a JWT scheme needs a different mechanism instead, like a per-user token-
+version number that gets incremented on login and checked on every request —
+out of scope here, but worth knowing if that's what your app uses).
+
+**13. On login, delete any existing session(s) for that user before creating
+the new one:**
+
+```javascript
+function login(username, password) {
+    // ... existing username/password verification ...
+
+    // New login wins: invalidate any session(s) this user already had
+    // elsewhere. The other device finds out on its next request.
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+
+    const token = createNewSessionToken();
+    db.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').run(token, user.id);
+    return { user, token };
+}
+```
+
+**14. Make sure your "not logged in" check uses a status code that's
+never also used for a bad login attempt.** This matters because the
+frontend (step 15) needs to tell "your session just became invalid" apart
+from "you typed the wrong password" — using the same status for both would
+make that impossible to distinguish reliably:
+
+```javascript
+// Auth middleware — checks an existing session:
+function requireAuth(req, res, next) {
+    const session = findSessionByToken(req.cookies.sessionToken);
+    if (!session) {
+        res.status(401).json({ error: 'Not logged in.' }); // 401 = session invalid
+        return;
+    }
+    req.session = session;
+    next();
+}
+
+// Login route — checks credentials:
+if (!validCredentials) {
+    res.status(400).json({ error: 'Invalid username or password.' }); // 400, never 401
+    return;
+}
+```
+
+**15. Detect that 401 in exactly one place** — your shared fetch wrapper —
+rather than in every individual call site:
+
+```javascript
+let sessionExpiredHandler = null;
+let sessionExpiredFired = false; // fire at most once per page load
+
+function onSessionExpired(handler) { sessionExpiredHandler = handler; }
+
+async function handleResponse(res) {
+    let body = null;
+    try { body = await res.json(); } catch (e) { body = null; }
+
+    if (res.status === 401 && !sessionExpiredFired) {
+        sessionExpiredFired = true;
+        if (sessionExpiredHandler) { sessionExpiredHandler(); }
+    }
+
+    if (!res.ok) {
+        throw new Error((body && body.error) || 'Request failed (' + res.status + ').');
+    }
+    return body;
+}
+```
+
+**16. Register the handler on every page that requires login**, reusing
+whatever "show the login screen" logic that page's normal boot sequence
+already has, rather than writing a second one:
+
+```javascript
+function start() {
+    apiClient.onSessionExpired(() => {
+        window.location.reload(); // re-runs the existing login-gate check
+    });
+    // ... rest of your normal page initialization ...
+}
+```
+
+**Known limitation, by design:** this only takes effect the next time the
+kicked-out device actually makes a request — there's no background polling
+added to detect it instantly, since that would mean constant network chatter
+just to catch an occasional event. If a device is sitting idle when it gets
+logged out elsewhere, it won't visibly react until the next click.
+
 ## End result
 
 - Editing your server or frontend code takes effect the next time you
@@ -628,10 +730,13 @@ function saveSettings(settings) {
   else, and manual changes never leave you with a fully-stopped server.
 - The whole thing is trivially portable — copy the project folder to another
   machine and it runs, no installer, no registry entries.
+- (If Part G is included) Logging in from a second device automatically —
+  and safely — logs the first one out, rather than both silently sharing one
+  account with no awareness of each other.
 
 ## Adapting this to a different project
 
-Five things to check per project:
+Six things to check per project:
 1. Whether you need Part 0a (reorganize an existing backend) or Part 0b
    (build one from scratch for a plain HTML/CSS/JS site).
 2. Your existing folder structure reorganized to match, if it doesn't
@@ -641,6 +746,8 @@ Five things to check per project:
 4. The `SHORTCUTS` array in Part D step 6 — your app's actual important
    pages.
 5. `productName`/`executableName` in Part E step 10.
+6. Whether Part G applies at all — only relevant if the project has user
+   accounts/login in the first place.
 
 Everything else (port logic, LAN detection, the control window's structure,
 the packaging config) is copy-paste reusable as-is.
