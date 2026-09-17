@@ -243,6 +243,13 @@ function login(username, password) {
 
     clearAttempts(username);
 
+    // New login wins: any session(s) this user already had elsewhere are
+    // invalidated. The other device finds out on its next request (any
+    // authenticated call there will start failing with 401 "Not logged
+    // in.") — the frontend's apiClient.js watches for that and redirects
+    // back to the login screen automatically.
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(row.id);
+
     const token = newSessionToken();
     const loggedInAt = new Date().toISOString();
     db.prepare(
