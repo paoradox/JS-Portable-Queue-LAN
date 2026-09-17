@@ -85,7 +85,6 @@ JS-Portable-Queue-LAN/
 
 Here are some screenshots from the system, showcasing its interface and key features:
 
-### Local Web App & Desktop in Action
 | Launch Server & Setup Login | Encoding & Adaptive Display Screen | Admin Controls |
 |----------------|-------------|---------------|
 | ![Launch Server & Setup Login](frontend/preview/Launcher%20Server%20%26%20Setup%20Login.png) | ![Encoding & Adaptive Display Screen](frontend/preview/Encoding%20%26%20Adaptive%20Display%20Screen.png) | ![Admin Controls](frontend/preview/Admin%20Controls.png) |
