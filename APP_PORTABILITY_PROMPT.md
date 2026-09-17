@@ -616,107 +616,102 @@ function saveSettings(settings) {
 }
 ```
 
-## Part G — Optional: single-session-per-account (new login kicks out the old one)
+## Part G — Optional: single-session-per-account enforcement
 
-This part is **independent of the Electron-wrapping pattern above** — it
-applies to any Express app with a login/session system, whether it's wrapped
-in Electron or just running as a plain web server. Include it only if your
-app has user accounts and you want logging in from a second device to
-invalidate the first one, rather than letting the same account stay logged
-in on multiple devices at once with no awareness of each other.
+**Only relevant if your app has user accounts/login at all** — skip this
+part entirely for apps with no auth system. Covers one specific, easy-to-miss
+decision: what happens if the same account logs in from two devices at once?
+Left unhandled, both sessions silently stay valid forever, which is rarely
+what you actually want for something like a shared station/counter account.
 
-**Assumes:** a database-backed session system (a `sessions` table or
-equivalent, looked up per-request from a cookie/token) — not a stateless
-scheme like plain JWTs, which can't be "deleted" server-side the same way
-(a JWT scheme needs a different mechanism instead, like a per-user token-
-version number that gets incremented on login and checked on every request —
-out of scope here, but worth knowing if that's what your app uses).
+This assumes a fairly standard setup: a `sessions` table/store keyed by a
+random token, checked by an auth middleware that runs before protected
+routes. Adjust names to match your actual auth code.
 
-**13. On login, delete any existing session(s) for that user before creating
-the new one:**
+**13. On login, invalidate any other session(s) the same account already
+had** — new login wins, whichever device was previously logged in gets
+logged out:
 
 ```javascript
-function login(username, password) {
-    // ... existing username/password verification ...
+// Inside your login function, after verifying the password is correct
+// and before creating the new session:
+db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
 
-    // New login wins: invalidate any session(s) this user already had
-    // elsewhere. The other device finds out on its next request.
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
-
-    const token = createNewSessionToken();
-    db.prepare('INSERT INTO sessions (token, user_id) VALUES (?, ?)').run(token, user.id);
-    return { user, token };
-}
+const token = createNewSessionToken();
+db.prepare('INSERT INTO sessions (token, user_id, ...) VALUES (?, ?, ...)').run(token, user.id, /* ... */);
 ```
 
-**14. Make sure your "not logged in" check uses a status code that's
-never also used for a bad login attempt.** This matters because the
-frontend (step 15) needs to tell "your session just became invalid" apart
-from "you typed the wrong password" — using the same status for both would
-make that impossible to distinguish reliably:
+**14. Make sure your auth middleware returns a status code EXCLUSIVELY used
+for "this session is no longer valid"** — never reused for a plain failed
+login attempt (wrong password), or the client-side detection in step 15
+won't be able to tell the two apart:
 
 ```javascript
-// Auth middleware — checks an existing session:
+// Auth middleware — runs before any route that requires login
 function requireAuth(req, res, next) {
-    const session = findSessionByToken(req.cookies.sessionToken);
+    const session = findSessionByToken(req.cookies.session_token);
     if (!session) {
-        res.status(401).json({ error: 'Not logged in.' }); // 401 = session invalid
+        res.status(401).json({ error: 'Not logged in.' }); // reserved exclusively for this
         return;
     }
-    req.session = session;
+    req.user = session.user;
     next();
 }
 
-// Login route — checks credentials:
-if (!validCredentials) {
-    res.status(400).json({ error: 'Invalid username or password.' }); // 400, never 401
-    return;
-}
+// Your login route's failure path should use a DIFFERENT status:
+// res.status(400).json({ error: 'Invalid username or password.' });
 ```
 
-**15. Detect that 401 in exactly one place** — your shared fetch wrapper —
-rather than in every individual call site:
+**15. Detect that 401 in exactly one place — your shared API request
+wrapper — instead of every individual call site**, and let whoever's using
+that wrapper (your app's pages) register what should happen:
 
 ```javascript
+// In your shared fetch wrapper (the one file every API call already
+// goes through):
 let sessionExpiredHandler = null;
 let sessionExpiredFired = false; // fire at most once per page load
 
-function onSessionExpired(handler) { sessionExpiredHandler = handler; }
+function onSessionExpired(handler) {
+    sessionExpiredHandler = handler;
+}
 
 async function handleResponse(res) {
-    let body = null;
-    try { body = await res.json(); } catch (e) { body = null; }
-
     if (res.status === 401 && !sessionExpiredFired) {
         sessionExpiredFired = true;
         if (sessionExpiredHandler) { sessionExpiredHandler(); }
     }
-
-    if (!res.ok) {
-        throw new Error((body && body.error) || 'Request failed (' + res.status + ').');
-    }
-    return body;
+    // ... your existing error-throwing logic for non-ok responses ...
 }
 ```
-
-**16. Register the handler on every page that requires login**, reusing
-whatever "show the login screen" logic that page's normal boot sequence
-already has, rather than writing a second one:
 
 ```javascript
-function start() {
-    apiClient.onSessionExpired(() => {
-        window.location.reload(); // re-runs the existing login-gate check
-    });
-    // ... rest of your normal page initialization ...
-}
+// In each page's own startup code, before it fetches anything:
+apiClient.onSessionExpired(() => {
+    window.location.reload();
+    // Reloading re-runs your normal "am I logged in?" boot check, which
+    // now correctly finds no valid session and shows the login screen —
+    // reuses existing logic instead of writing a second "show login"
+    // code path.
+});
 ```
 
-**Known limitation, by design:** this only takes effect the next time the
-kicked-out device actually makes a request — there's no background polling
-added to detect it instantly, since that would mean constant network chatter
-just to catch an occasional event. If a device is sitting idle when it gets
-logged out elsewhere, it won't visibly react until the next click.
+**Why this shape specifically:**
+- Detecting centrally (one wrapper) instead of in every individual API call
+  site means you don't have to remember to add this check anywhere new as
+  the app grows — new API calls get it for free just by going through the
+  same wrapper.
+- The "fire at most once" guard matters because several in-flight requests
+  can all fail together right after invalidation — without it, you'd
+  trigger multiple redundant reloads.
+- Reloading (rather than writing a separate "you got logged out" screen) is
+  deliberately the boring choice — it reuses whatever login-gate logic
+  already exists rather than adding a second, parallel code path that has
+  to be kept in sync with the first one.
+- This only catches it on the *next* action from the logged-out device, not
+  instantly — no background polling was added purely to detect this sooner,
+  since that trades constant network chatter for an edge case that mostly
+  matters "next time you try to do something," not to the millisecond.
 
 ## End result
 
@@ -728,11 +723,10 @@ logged out elsewhere, it won't visibly react until the next click.
   to change the port without editing any files.
 - The port auto-recovers if its default/saved choice is taken by something
   else, and manual changes never leave you with a fully-stopped server.
+- (If you have accounts/login) the same account can't be silently logged in
+  from two places at once without either side finding out.
 - The whole thing is trivially portable — copy the project folder to another
   machine and it runs, no installer, no registry entries.
-- (If Part G is included) Logging in from a second device automatically —
-  and safely — logs the first one out, rather than both silently sharing one
-  account with no awareness of each other.
 
 ## Adapting this to a different project
 
@@ -746,8 +740,8 @@ Six things to check per project:
 4. The `SHORTCUTS` array in Part D step 6 — your app's actual important
    pages.
 5. `productName`/`executableName` in Part E step 10.
-6. Whether Part G applies at all — only relevant if the project has user
-   accounts/login in the first place.
+6. Whether your app has user accounts at all — if so, Part G's session
+   handling; if not, skip Part G entirely.
 
 Everything else (port logic, LAN detection, the control window's structure,
 the packaging config) is copy-paste reusable as-is.
