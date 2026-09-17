@@ -78,7 +78,7 @@ JS-Portable-Queue-LAN/
 └─ package-lock.json
 ```
 
-## 📸 Preview
+## Preview
 
 Here are some screenshots from the game, showcasing its interface and key features:
 
