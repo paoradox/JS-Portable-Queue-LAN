@@ -1,4 +1,4 @@
-# JS-Portable-Queue-LAN — Queue Manager: Portable Queueing System
+# Queue Manager: Portable Queueing System
 
 [![Website](https://img.shields.io/badge/website-offline-02aaff?style=for-the-badge&logo=githubpages)](https://paoradox.github.io/)
 [![Built with](https://img.shields.io/badge/built_with-HTML%2FCSS%2FJS-02aaff?style=for-the-badge&logo=html5)](https://developer.mozilla.org/)
