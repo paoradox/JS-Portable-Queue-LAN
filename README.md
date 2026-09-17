@@ -80,7 +80,7 @@ JS-Portable-Queue-LAN/
 
 ## Preview
 
-Here are some screenshots from the game, showcasing its interface and key features:
+Here are some screenshots from the system, showcasing its interface and key features:
 
 ### Local Web App & Desktop in Action
 | Launch Server & Setup Login | Encoding & Adaptive Display Screen | Admin Controls |
