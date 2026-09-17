@@ -33,7 +33,7 @@ The original project ran entirely on browser `localStorage`, which meant every d
 | PWD Queue | `P` |
 | Escalation Queue | `E` |
 
-## Counters
+## Counters a.k.a "Stations"
 
 `C1`, `C2`, `C3`, `C4`, `C5`, `C6`, `PWD`, `ESCAL`
 
