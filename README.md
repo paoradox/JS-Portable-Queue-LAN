@@ -85,9 +85,9 @@ JS-Portable-Queue-LAN/
 
 Here are some screenshots from the system, showcasing its interface and key features:
 
-| Launch Server & Setup Login | Encoding & Adaptive Display Screen | Admin Controls |
+| Launch Server & Setup Login | Encoding & Responsive Display | Admin Controls |
 |----------------|-------------|---------------|
-| ![Launch Server & Setup Login](frontend/preview/Launcher%20Server%20%26%20Setup%20Login.png) | ![Encoding & Adaptive Display Screen](frontend/preview/Encoding%20%26%20Adaptive%20Display%20Screen.png) | ![Admin Controls](frontend/preview/Admin%20Controls.png) |
+| ![Launch Server & Setup Login](frontend/preview/Launcher%20Server%20%26%20Setup%20Login.png) | ![Encoding & Responsive Display](frontend/preview/Encoding%20%26%20Responsive%20Display.png) | ![Admin Controls](frontend/preview/Admin%20Controls.png) |
 
 ## Running the Application
 
