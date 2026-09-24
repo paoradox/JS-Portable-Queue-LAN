@@ -165,7 +165,7 @@ The server emits a `queueUpdated` Socket.IO event whenever anything changes (iss
 
 ## Network Requirements
 
-Runs entirely on a local network — one host computer, the same Wi-Fi/Ethernet network, no internet access, no cloud services, no port forwarding or router configuration. The one exception is the optional YouTube video playlist feature on the display board, which needs outbound internet access from the host machine to reach YouTube; every other feature works fully offline.
+Runs entirely on a local network — one host computer, the same Wi-Fi/Ethernet network, no internet access, no cloud services, no port forwarding or router configuration. The one exception is the optional YouTube video playlist feature on the display board, which needs outbound internet access from the host machine to reach YouTube; every other feature works fully offline. 
 
 ## What Changed From JS-Portable-Queue
 
